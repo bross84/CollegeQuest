@@ -261,3 +261,9 @@ sub, sup { line-height: 0; }
 .warn { color: var(--notyet); }
 select.line { width: auto; max-width: 100%; }
 code { font-family: var(--mono); font-size: .9em; }
+
+/* stacked forms outside a card */
+section.zone.form { display: flex; flex-direction: column; gap: 6px; margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--line); }
+section.zone.form h3 { margin-bottom: 2px; }
+section.zone.form .field { margin-top: 10px; }
+section.zone.form .answer { margin-top: 16px; }

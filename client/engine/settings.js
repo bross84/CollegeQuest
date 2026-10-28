@@ -22,7 +22,7 @@ function renderSettings() {
   const test = (n) => { const t = ST.tests[n]; return t === 'busy' ? '<small>Testing…</small>' : !t ? '' : t.ok ? `<small class="okmsg">Works: ${esc(t.model)} answered in ${(t.ms / 1000).toFixed(1)}s.</small>` : `<small class="warn">Failed: ${esc(t.message)}</small>`; };
   const prov = Object.keys(d.providers).map((n) => {
     const p = d.providers[n];
-    return `<section class="zone"><h3>${PROVIDER_LABEL[n] || n}</h3>
+    return `<section class="zone form"><h3>${PROVIDER_LABEL[n] || n}</h3>
       <small>${keyStatus(p)}</small>
       <label class="field" for="st-${n}-key">API key <small>(leave blank to keep the current one)</small></label>
       <input class="line" id="st-${n}-key" data-st="${n}.key" type="password" autocomplete="off" spellcheck="false" placeholder="${p.keySource === 'none' ? 'paste a key' : '•••••••• unchanged'}" ${dis}>
