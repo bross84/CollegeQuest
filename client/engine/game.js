@@ -223,3 +223,20 @@ function toChoice(p) {
   return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: m.choices, answer: m.answer };
 }
 const newProblem = (skill) => (S.style === 'type' ? skill.gen() : toChoice(skill.gen()));
+// Generators are random, so a skill with few variations can repeat itself. Remember what was shown and draw again:
+// first avoid anything from the last 40 problems, then the last 10, and never the one just before.
+const recentQs = [];
+function freshProblem(skill) {
+  const key = (p) => skill.id + '|' + plain(p.q);
+  let p;
+  for (const span of [40, 10, 1]) {
+    for (let i = 0; i < 30; i++) {
+      p = newProblem(skill);
+      if (!recentQs.slice(-span).includes(key(p))) break;
+    }
+    if (!recentQs.slice(-span).includes(key(p))) break;
+  }
+  recentQs.push(key(p));
+  if (recentQs.length > 80) recentQs.shift();
+  return p;
+}

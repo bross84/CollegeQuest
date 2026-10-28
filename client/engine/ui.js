@@ -149,7 +149,7 @@ function startRound(ids, mode, skillId) {
 const startMixed = (n) => startRound(pickMixed(n), 'set', null);
 function nextProblem() {
   round.skill = SKILLS.find((s) => s.id === round.ids[round.i]);
-  round.p = newProblem(round.skill);
+  round.p = freshProblem(round.skill);
   round.tries = 0; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = '';
   renderRound();
 }
@@ -218,7 +218,7 @@ function showSteps() {
 }
 // After reading the steps: a fresh problem of the same skill in the same slot. A correct answer counts as a retry.
 function similar() {
-  round.p = newProblem(round.skill); round.tries = 1; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = '';
+  round.p = freshProblem(round.skill); round.tries = 1; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = '';
   renderRound();
 }
 function advance() {
