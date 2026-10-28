@@ -1,0 +1,15 @@
+node_modules
+public
+data
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.gitattributes
+*.log
+test
+README.md
+.claude
+.vscode
+.idea

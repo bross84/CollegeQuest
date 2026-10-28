@@ -1,0 +1,17 @@
+services:
+  collegequest:
+    build: .
+    image: collegequest:latest
+    container_name: collegequest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Inside the container the app always listens on 3000; PORT above only changes the published port.
+      PORT: "3000"
+    volumes:
+      - collegequest-data:/data
+
+volumes:
+  collegequest-data:

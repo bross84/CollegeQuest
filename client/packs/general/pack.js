@@ -1,0 +1,21 @@
+// A subject with no generated practice: homework help, the tutor and documents still work.
+return {
+  id: 'general',
+  skills: SKILLS,
+  zones: [],
+  ranks: ['Newcomer', 'Regular', 'Studious', 'Focused', 'Sharp', 'Scholar', 'Expert', 'Top of the class'],
+  coreName: '',
+  coreTitle: '',
+  baseTitle: '',
+  hasChoiceMode: false,
+  badInput: 'I couldn’t read that.',
+  ph: {},
+  fmt: (s) => esc(s).replace(/\^(\([^)]*\)|-?\w+)/g, (m, e) => `<sup>${e.replace(/^\(|\)$/g, '')}</sup>`).replace(/sqrt\(/g, '√('),
+  refs: [],
+  tutor: { role: 'study', style: 'Name the method or rule to apply, not the theory behind it.' },
+  ask: { format: 'Plain text only.', extra: '', example: 'e.g. Can you explain this another way?' },
+  add: { example: 'Type the problem exactly as written', hint: 'Use ^ for exponents and / for fractions.', key: 'the book’s answer' },
+  transcribe: 'Transcribe the problem in this photo as plain text. Reply with only the problem text.',
+  finder: 'plain text, keep any given values or tables',
+  videoWord: '',
+};

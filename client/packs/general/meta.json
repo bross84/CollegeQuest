@@ -1,0 +1,8 @@
+{
+  "id": "general",
+  "order": 3,
+  "name": "Other subject",
+  "blurb": "No practice quests. Homework checking, the AI tutor and uploaded class documents work for any course.",
+  "files": ["pack.js"],
+  "preset": { "name": "", "description": "", "examLabel": "", "examDate": "" }
+}
