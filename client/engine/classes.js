@@ -2,7 +2,7 @@
 let CLASSES = [];
 let CF = null;           // the class form being edited, or null
 let delClassArmed = false;
-const AUTH = { required: false };
+const AUTH = { required: false, public: false };
 
 const metaOf = (id) => CQ.meta.find((m) => m.id === id) || CQ.meta[CQ.meta.length - 1];
 const lastClassId = () => LS.get('cq-last');
@@ -15,6 +15,7 @@ function renderLogin(err) {
     <form data-form="login" autocomplete="on">
       <label class="field" for="lpw">Password</label>
       <input class="line" id="lpw" type="password" autocomplete="current-password" autofocus>
+      <label class="chk"><input type="checkbox" id="lpub"> This is a public or shared computer <small>(shorter sign-in, nothing saved in this browser)</small></label>
       <div class="answer"><button class="btn" type="submit">Sign in</button></div>
       ${err ? `<div class="fb no" role="status"><p>${esc(err)}</p></div>` : ''}
     </form></div>`;
@@ -22,10 +23,10 @@ function renderLogin(err) {
 async function doLogin() {
   const pw = document.getElementById('lpw').value;
   try {
-    await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) })
+    await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw, publicPc: document.getElementById('lpub').checked }) })
       .then(async (r) => { if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || 'Could not sign in.'); });
     authLostFlag = false;
-    startApp();
+    boot();
   } catch (e) { renderLogin(e.message); }
 }
 
@@ -165,7 +166,7 @@ function classAct(act, t) {
   else if (act === 'c-save') saveClassForm();
   else if (act === 'c-delete') deleteClass();
   else if (act === 'c-settings') openSettings();
-  else if (act === 'c-logout') api('POST', '/api/logout').then(() => { authLostFlag = false; renderLogin(); });
+  else if (act === 'c-logout') signOut();
   else if (act === 'c-pack') {
     syncCF();
     const old = CF.preset, p = metaOf(t.dataset.id).preset;
@@ -176,6 +177,13 @@ function classAct(act, t) {
     CF.pack = t.dataset.id; CF.preset = p;
     renderClassForm();
   }
+}
+// End the session, and forget everything this browser cached for it.
+async function signOut() {
+  try { if (CLASS) await pushNow(); await api('POST', '/api/logout'); } catch (e) { /* signing out anyway */ }
+  LS.clear();
+  authLostFlag = false; CLASS = null; PACK = null; AUTH.public = false;
+  renderLogin();
 }
 function formSubmit(form) {
   if (form.dataset.form === 'login') doLogin();

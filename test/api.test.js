@@ -174,3 +174,30 @@ test('settings: locked when the server has no password', async () => {
   assert.strictEqual((await (await fetch(url)).json()).canEdit, false);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('sessions: normal sign-in lasts, public-computer sign-in is a session cookie', async () => {
+  const normal = await call('POST', '/api/login', { password: 'secret' });
+  assert.match(normal.res.headers.get('set-cookie'), /Max-Age=\d+/);
+  const pub = await call('POST', '/api/login', { password: 'secret', publicPc: true });
+  const setCookie = pub.res.headers.get('set-cookie');
+  assert.doesNotMatch(setCookie, /Max-Age/, 'dies with the browser');
+  const s = (await call('GET', '/api/session', null, { Cookie: setCookie.split(';')[0] })).data;
+  assert.strictEqual(s.public, true);
+  assert.strictEqual(s.authed, true);
+  assert.strictEqual((await call('GET', '/api/session', null, { Cookie: cookie })).data.public, false);
+  assert.strictEqual((await call('GET', '/api/session', null, { Cookie: 'cq_session=1.2.forged' })).data.authed, false);
+});
+
+test('proxy trust: TRUST_PROXY takes a hop count, and a spoofed X-Forwarded-For cannot dodge the login limit', async () => {
+  assert.strictEqual(loadConfig({ TRUST_PROXY: '1' }).trustProxy, 1);
+  assert.strictEqual(loadConfig({ TRUST_PROXY: 'true' }).trustProxy, true);
+  assert.strictEqual(loadConfig({}).trustProxy, false);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-proxy-'));
+  const made = createApp(loadConfig({ DATA_DIR: dir, PUBLIC_DIR: dir, APP_PASSWORD: 'secret', TRUST_PROXY: '1' }));
+  const s = await startServer(made.app);
+  const login = (i) => fetch(`http://127.0.0.1:${s.address().port}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${i}, 203.0.113.7` }, body: JSON.stringify({ password: 'wrong' }) });
+  let last;
+  for (let i = 0; i < 11; i++) last = await login(i); // different fake client addresses, same real one (the last entry)
+  assert.strictEqual(last.status, 429);
+  s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -1,8 +1,10 @@
 // Saving progress. Every change is kept in this browser right away and pushed to the server shortly after,
 // so progress follows you between devices. If two devices changed things, the two copies are merged, not overwritten.
+// On a "public computer" sign-in nothing is cached in the browser: the server copy is the only copy.
 const LS = {
-  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked: the server copy still works */ } },
+  get(k) { try { return AUTH.public ? null : localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { if (!AUTH.public) localStorage.setItem(k, v); } catch (e) { /* storage blocked: the server copy still works */ } },
+  clear() { try { Object.keys(localStorage).filter((k) => k.startsWith('cq-')).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignore */ } },
 };
 let syncedT = 0, pushTimer = null, pushing = false, pushAgain = false, syncMsg = '';
 const stateKey = () => 'cq-state-' + CLASS.id;

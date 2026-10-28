@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${PORT:-3000}:3000"
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-3000}:3000"
     environment:
       # Inside the container the app always listens on 3000; PORT above only changes the published port.
       PORT: "3000"

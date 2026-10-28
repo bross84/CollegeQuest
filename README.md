@@ -26,16 +26,38 @@ Set these in `.env`:
 | `APP_PASSWORD` | One shared password for the whole app. Set it: without it, anyone who can reach the page can spend your AI quota. |
 | `GROQ_API_KEY`, `OPENROUTER_API_KEY` | Set one or both. With both, `AI_PROVIDER_ORDER` (default `groq,openrouter`) decides who goes first, and the other is the fallback on rate limits or outages. |
 | `GROQ_MODEL`, `GROQ_QUICK_MODEL`, `GROQ_VISION_MODEL`, `OPENROUTER_MODEL`, ... | Override the models. Model names change often, so check the provider catalogs if a call fails with a model error. Reading photos needs a vision-capable model. |
-| `COOKIE_SECURE`, `TRUST_PROXY` | Set both to `true` when serving over HTTPS behind a reverse proxy. |
+| `COOKIE_SECURE`, `TRUST_PROXY`, `BIND_ADDRESS` | Behind HTTPS: `COOKIE_SECURE=true`, `TRUST_PROXY=1` (number of proxies in front), and `BIND_ADDRESS=127.0.0.1` if only a local tunnel or proxy should reach it. See below. |
 | `PORT`, `MAX_UPLOAD_MB` | Published port and per-file upload limit. |
 
 You can also set keys, provider order and models from the app: class list, **AI settings**. Values saved there are stored in the server's database (plain text, like `.env`), override the environment, apply immediately, and have a **Save and test** button. Editing is only allowed when `APP_PASSWORD` is set.
 
 With no AI keys the app still works for practice; checking, explaining and the tutor are switched off.
 
-### HTTPS
+### HTTPS and reaching it from elsewhere (Cloudflare Tunnel)
 
-The app speaks plain HTTP. If it is reachable beyond your home network, put it behind a reverse proxy (Caddy, Traefik, nginx) that terminates HTTPS, and set `COOKIE_SECURE=true` and `TRUST_PROXY=true`.
+The app speaks plain HTTP, so anything outside your home network should go through something that adds HTTPS. A Cloudflare Tunnel is a good fit: nothing is opened on your router, and Cloudflare provides the certificate.
+
+1. In the Cloudflare dashboard (Zero Trust, then Networks, then Tunnels) create a tunnel of type **Cloudflared** and copy its token.
+2. Add a **public hostname** for the tunnel, for example `study.example.com`, with service type **HTTP** and URL `collegequest:3000`.
+3. In `.env` set:
+   ```
+   TUNNEL_TOKEN=<the token>
+   APP_PASSWORD=<something long>
+   COOKIE_SECURE=true
+   TRUST_PROXY=1
+   BIND_ADDRESS=127.0.0.1
+   ```
+4. Start both containers:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+   ```
+
+Notes:
+- `TRUST_PROXY=1` means "one proxy sits in front of the app". Use the number, not `true`: `true` trusts a header that visitors can fake, which would let them dodge the sign-in attempt limit.
+- `BIND_ADDRESS=127.0.0.1` stops the app being reachable on your LAN by IP, so the tunnel is the only way in.
+- For a second lock in front of the password, add a **Cloudflare Access** policy to the hostname (for example, email one-time codes for just your address). It is free for small numbers of users.
+- On a college or other shared computer, tick **This is a public or shared computer** when signing in: the sign-in lasts 12 hours at most and ends when the browser closes, and nothing is saved in that browser. Use **Sign out** when you finish; it also clears anything this browser cached.
+- Uploads go through Cloudflare, which allows up to 100 MB per request on the free plan; the app's own limit is 25 MB per file.
 
 ### Backups
 

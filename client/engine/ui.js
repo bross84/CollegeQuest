@@ -51,7 +51,7 @@ function renderHome() {
   ${baseZones.length ? `<h2 class="part">${esc(PACK.baseTitle || 'Earlier material')}</h2>` : ''}
   ${baseZones.map((z) => zoneHTML(z, false)).join('')}
   <div class="foot"><small><span id="syncnote">${syncNote()}</span> ${S.total} problems answered, ${S.right} right on the first try.</small>
-    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> <button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
+    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> ${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
   window.scrollTo(0, 0);
 }
 
@@ -91,7 +91,7 @@ function renderHomeLite() {
   ${mineSection()}
   ${docsSection()}
   <div class="foot"><small><span id="syncnote">${syncNote()}</span> ${S.total} problems answered.</small>
-    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> <button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
+    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> ${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
   window.scrollTo(0, 0);
 }
 

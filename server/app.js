@@ -33,13 +33,13 @@ function createApp(cfg) {
 
   const app = express();
   app.disable('x-powered-by');
-  if (cfg.trustProxy) app.set('trust proxy', true);
+  if (cfg.trustProxy) app.set('trust proxy', cfg.trustProxy);
   app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'same-origin'); next(); });
 
   const api = express.Router();
   const json = express.json({ limit: '2mb' });
   api.get('/health', (req, res) => res.json({ ok: true }));
-  api.get('/session', (req, res) => res.json({ authRequired: auth.required, authed: auth.authed(req) }));
+  api.get('/session', (req, res) => res.json({ authRequired: auth.required, authed: auth.authed(req), public: auth.isPublic(req) }));
   api.post('/login', express.json({ limit: '10kb' }), (req, res) => auth.login(req, res));
   api.post('/logout', (req, res) => auth.logout(req, res));
   api.use(auth.middleware);

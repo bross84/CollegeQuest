@@ -7,14 +7,15 @@ async function startApp() {
   if (c) enterClass(c); else renderClasses();
 }
 
-(async () => {
+async function boot() {
   try {
     const s = await (await fetch('/api/session')).json();
-    AUTH.required = !!s.authRequired;
+    AUTH.required = !!s.authRequired; AUTH.public = !!s.public;
     if (s.authRequired && !s.authed) return renderLogin();
   } catch (e) { app.innerHTML = '<div class="fb no" role="status"><p>Could not reach the server.</p></div>'; return; }
   startApp();
-})();
+}
+boot();
 
 // The browser's back button from a class returns to the class list.
 window.addEventListener('hashchange', () => {

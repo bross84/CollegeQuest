@@ -1,0 +1,14 @@
+# Adds a Cloudflare Tunnel next to the app. Use it together with the main file:
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+# Needs TUNNEL_TOKEN in .env (see the README). The tunnel reaches the app over the Docker network at http://collegequest:3000,
+# so no router ports need to be opened.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: collegequest-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env}
+    depends_on:
+      - collegequest

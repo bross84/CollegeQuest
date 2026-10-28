@@ -12,7 +12,8 @@ function loadConfig(env = process.env) {
     password: env.APP_PASSWORD || '',
     sessionSecret: env.SESSION_SECRET || '',
     cookieSecure: String(env.COOKIE_SECURE || '').toLowerCase() === 'true',
-    trustProxy: String(env.TRUST_PROXY || '').toLowerCase() === 'true',
+    // 'true' trusts every X-Forwarded-For hop (spoofable). A number trusts that many proxies, which is what you want: 1 behind cloudflared.
+    trustProxy: /^\d+$/.test(String(env.TRUST_PROXY || '').trim()) ? +env.TRUST_PROXY : String(env.TRUST_PROXY || '').toLowerCase() === 'true',
     maxUploadMb: num(env.MAX_UPLOAD_MB, 25),
     ai: {
       order,

@@ -5,6 +5,7 @@ const path = require('path');
 
 const COOKIE = 'cq_session';
 const MAX_AGE_S = 60 * 60 * 24 * 30;
+const PUBLIC_AGE_S = 60 * 60 * 12; // "public computer" sign-ins: short, and the cookie dies with the browser
 
 function loadSecret(cfg) {
   if (cfg.sessionSecret) return cfg.sessionSecret;
@@ -24,18 +25,19 @@ const safeEq = (a, b) => {
 
 function createAuth(cfg) {
   const secret = loadSecret(cfg);
-  const sign = (exp) => crypto.createHmac('sha256', secret).update('s.' + exp).digest('hex');
-  const make = () => { const exp = Date.now() + MAX_AGE_S * 1000; return `${exp}.${sign(exp)}`; };
-  const valid = (tok) => {
-    const [exp, mac] = String(tok || '').split('.');
-    return !!exp && !!mac && +exp > Date.now() && safeEq(mac, sign(exp));
+  const sign = (payload) => crypto.createHmac('sha256', secret).update('s.' + payload).digest('hex');
+  const make = (pub) => { const p = `${Date.now() + (pub ? PUBLIC_AGE_S : MAX_AGE_S) * 1000}.${pub ? 1 : 0}`; return `${p}.${sign(p)}`; };
+  const parse = (tok) => {
+    const [exp, pub, mac] = String(tok || '').split('.');
+    return exp && pub !== undefined && mac && +exp > Date.now() && safeEq(mac, sign(`${exp}.${pub}`)) ? { pub: pub === '1' } : null;
   };
   const cookies = (req) => Object.fromEntries(String(req.headers.cookie || '').split(';').map((p) => {
     const i = p.indexOf('=');
     return i < 0 ? ['', ''] : [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())];
   }));
   const required = !!cfg.password;
-  const authed = (req) => !required || valid(cookies(req)[COOKIE]);
+  const authed = (req) => !required || !!parse(cookies(req)[COOKIE]);
+  const isPublic = (req) => { const s = parse(cookies(req)[COOKIE]); return !!s && s.pub; };
 
   // Slow down password guessing: 10 failures per IP per 15 minutes.
   const fails = new Map();
@@ -47,19 +49,21 @@ function createAuth(cfg) {
 
   function cookieHeader(req, value, maxAge) {
     const secure = cfg.cookieSecure || req.secure ? '; Secure' : '';
-    return `${COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+    return `${COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax${maxAge === null ? '' : `; Max-Age=${maxAge}`}${secure}`;
   }
 
   return {
     required,
     authed,
+    isPublic,
     login(req, res) {
       if (!required) return res.json({ ok: true });
       if (blocked(req.ip)) return res.status(429).json({ error: 'Too many attempts. Try again later.' });
       const pw = (req.body && req.body.password) || '';
       if (!safeEq(pw, cfg.password)) { miss(req.ip); return res.status(401).json({ error: 'Wrong password.' }); }
       fails.delete(req.ip);
-      res.setHeader('Set-Cookie', cookieHeader(req, make(), MAX_AGE_S));
+      const pub = !!(req.body && req.body.publicPc);
+      res.setHeader('Set-Cookie', cookieHeader(req, make(pub), pub ? null : MAX_AGE_S));
       return res.json({ ok: true });
     },
     logout(req, res) {
