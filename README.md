@@ -33,31 +33,23 @@ You can also set keys, provider order and models from the app: class list, **AI 
 
 With no AI keys the app still works for practice; checking, explaining and the tutor are switched off.
 
-### HTTPS and reaching it from elsewhere (Cloudflare Tunnel)
+### HTTPS and reaching it from elsewhere
 
-The app speaks plain HTTP, so anything outside your home network should go through something that adds HTTPS. A Cloudflare Tunnel is a good fit: nothing is opened on your router, and Cloudflare provides the certificate.
+The app speaks plain HTTP, so anything outside your home network should go through something that adds HTTPS, such as a Cloudflare Tunnel (`cloudflared`) or a reverse proxy. Point it at `http://localhost:3000` (or your `PORT`), and in `.env` set:
 
-1. In the Cloudflare dashboard (Zero Trust, then Networks, then Tunnels) create a tunnel of type **Cloudflared** and copy its token.
-2. Add a **public hostname** for the tunnel, for example `study.example.com`, with service type **HTTP** and URL `collegequest:3000`.
-3. In `.env` set:
-   ```
-   TUNNEL_TOKEN=<the token>
-   APP_PASSWORD=<something long>
-   COOKIE_SECURE=true
-   TRUST_PROXY=1
-   BIND_ADDRESS=127.0.0.1
-   ```
-4. Start both containers:
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
-   ```
+```
+APP_PASSWORD=<something long>
+COOKIE_SECURE=true
+TRUST_PROXY=1
+BIND_ADDRESS=127.0.0.1
+```
 
 Notes:
 - `TRUST_PROXY=1` means "one proxy sits in front of the app". Use the number, not `true`: `true` trusts a header that visitors can fake, which would let them dodge the sign-in attempt limit.
-- `BIND_ADDRESS=127.0.0.1` stops the app being reachable on your LAN by IP, so the tunnel is the only way in.
+- `BIND_ADDRESS=127.0.0.1` stops the app being reachable on your LAN by IP, so only a proxy or tunnel on the same machine can reach it. If your `cloudflared` runs in a Docker container, `localhost` will not reach the app from inside it; use the server's LAN IP instead and leave `BIND_ADDRESS` at its default.
 - For a second lock in front of the password, add a **Cloudflare Access** policy to the hostname (for example, email one-time codes for just your address). It is free for small numbers of users.
 - On a college or other shared computer, tick **This is a public or shared computer** when signing in: the sign-in lasts 12 hours at most and ends when the browser closes, and nothing is saved in that browser. Use **Sign out** when you finish; it also clears anything this browser cached.
-- Uploads go through Cloudflare, which allows up to 100 MB per request on the free plan; the app's own limit is 25 MB per file.
+- Behind Cloudflare, uploads are limited to 100 MB per request on the free plan; the app's own limit is 25 MB per file.
 
 ### Backups
 
