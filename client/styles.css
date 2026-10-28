@@ -250,3 +250,14 @@ sub, sup { line-height: 0; }
 .docrow { border: 1px solid var(--line); border-radius: 6px; }
 .docrow .dk { border-radius: 3px; }
 .classcard { display: flex; align-items: center; gap: 10px; background: var(--card); padding: 2px 14px 2px 2px; }
+
+/* references kept open under a problem */
+.inlineref { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 0 14px; }
+.inlineref summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+.inlineref[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.inlinebody { padding-bottom: 12px; }
+
+.okmsg { color: var(--good); }
+.warn { color: var(--notyet); }
+select.line { width: auto; max-width: 100%; }
+code { font-family: var(--mono); font-size: .9em; }

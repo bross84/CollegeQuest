@@ -41,6 +41,7 @@ function openDb(dataDir) {
       PRAGMA user_version = 1;
     `);
   }
+  if (v < 2) db.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); PRAGMA user_version = 2;');
   return db;
 }
 

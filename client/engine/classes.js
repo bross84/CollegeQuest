@@ -51,7 +51,7 @@ function renderClasses() {
   app.innerHTML = `<div class="top"><div class="brand">College Quest</div>${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button>' : ''}</div>
   <section class="zone"><h3>Your classes</h3>${list}
     <div class="row"><button class="btn ${CLASSES.length ? 'alt' : ''}" data-act="c-new">Add a class</button></div></section>
-  <div class="foot"><small>${esc(aiLine())}</small></div>`;
+  <div class="foot"><small>${esc(aiLine())}</small><button class="link" data-act="c-settings">AI settings</button></div>`;
   window.scrollTo(0, 0);
 }
 
@@ -164,6 +164,7 @@ function classAct(act, t) {
   else if (act === 'c-cancel') { CF = null; if (CLASS) renderHome(); else renderClasses(); }
   else if (act === 'c-save') saveClassForm();
   else if (act === 'c-delete') deleteClass();
+  else if (act === 'c-settings') openSettings();
   else if (act === 'c-logout') api('POST', '/api/logout').then(() => { authLostFlag = false; renderLogin(); });
   else if (act === 'c-pack') {
     syncCF();

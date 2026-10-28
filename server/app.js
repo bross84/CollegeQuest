@@ -15,7 +15,19 @@ const PACKS = ['chem', 'algebra', 'general'];
 function createApp(cfg) {
   const db = openDb(cfg.dataDir);
   const auth = createAuth(cfg);
-  const ai = createAi(cfg);
+  // AI settings: environment variables are the defaults, and anything saved from the Settings screen overrides them.
+  const MODELS = ['smart', 'quick', 'vision'], NAMES = Object.keys(cfg.ai.providers);
+  const aiOverrides = () => {
+    const r = db.prepare("SELECT value FROM settings WHERE key = 'ai'").get();
+    try { return r ? JSON.parse(r.value) : {}; } catch (e) { return {}; }
+  };
+  function effectiveAi() {
+    const o = aiOverrides(), out = { ...cfg.ai, providers: {} };
+    NAMES.forEach((n) => { const ov = o[n] || {}; out.providers[n] = { ...cfg.ai.providers[n], ...Object.fromEntries(['key', ...MODELS].filter((k) => ov[k]).map((k) => [k, ov[k]])) }; });
+    if (Array.isArray(o.order) && o.order.length) out.order = o.order.filter((n) => NAMES.includes(n));
+    return out;
+  }
+  const ai = createAi(cfg, effectiveAi);
   const uploads = path.join(cfg.dataDir, 'uploads');
   fs.mkdirSync(uploads, { recursive: true });
 
@@ -34,6 +46,48 @@ function createApp(cfg) {
 
   // ---- AI ----
   api.get('/ai/status', (req, res) => res.json(ai.status()));
+
+  // ---- settings (keys are never sent back in full) ----
+  function settingsView() {
+    const o = aiOverrides(), eff = effectiveAi();
+    return {
+      canEdit: auth.required,
+      order: eff.order,
+      providers: Object.fromEntries(NAMES.map((n) => {
+        const ov = o[n] || {}, base = cfg.ai.providers[n], key = eff.providers[n].key;
+        return [n, {
+          keySource: ov.key ? 'app' : base.key ? 'env' : 'none', keyHint: key ? '…' + key.slice(-4) : '',
+          models: { smart: ov.smart || '', quick: ov.quick || '', vision: ov.vision || '' },
+          defaults: { smart: base.smart, quick: base.quick, vision: base.vision },
+        }];
+      })),
+    };
+  }
+  api.get('/settings', (req, res) => res.json(settingsView()));
+  api.put('/settings', json, (req, res) => {
+    if (!auth.required) return res.status(403).json({ error: 'Set APP_PASSWORD on the server before editing keys here, so only you can change them.' });
+    const b = req.body || {}, o = aiOverrides();
+    NAMES.forEach((n) => {
+      const inb = b[n];
+      if (!inb || typeof inb !== 'object') return;
+      const ov = o[n] || {};
+      if (typeof inb.key === 'string') ov.key = inb.key.trim().slice(0, 300);
+      MODELS.forEach((m) => { if (typeof inb[m] === 'string') ov[m] = inb[m].trim().slice(0, 120); });
+      o[n] = ov;
+    });
+    if (Array.isArray(b.order) && b.order.length && b.order.every((n) => NAMES.includes(n))) o.order = [...new Set(b.order)];
+    db.prepare("INSERT INTO settings (key, value) VALUES ('ai', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(o));
+    return res.json(settingsView());
+  });
+  api.post('/settings/test', json, async (req, res) => {
+    const n = req.body && req.body.provider;
+    if (!NAMES.includes(n)) return res.status(400).json({ error: 'Unknown provider.' });
+    const t0 = Date.now();
+    try {
+      const reply = await ai.chat({ messages: [{ role: 'user', content: 'Reply with the single word OK.' }], quick: true, stream: false, only: n });
+      return res.json({ ok: true, ms: Date.now() - t0, model: effectiveAi().providers[n].quick, reply: reply.trim().slice(0, 40) });
+    } catch (e) { return res.json({ ok: false, code: e.code || 'ai_error', message: e.message }); }
+  });
   api.post('/ai', express.json({ limit: '40mb' }), async (req, res) => {
     const b = req.body || {};
     const messages = Array.isArray(b.messages)

@@ -8,6 +8,14 @@ const masteryHTML = (id) => {
   return `<span class="mastery"><span class="meter m${started ? n + 1 : 0}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>${started ? MASTERY[n] : 'Not started'}</span>`;
 };
 let round = null, resetArmed = false;
+// A reference (periodic table, ion list) kept open under the problem. Stays collapsed once you collapse it.
+let refOpen = true;
+function inlineRefHTML(key) {
+  const r = key && PACK.refs.find((x) => x.k === key);
+  return r ? `<details class="inlineref" ${refOpen ? 'open' : ''}><summary>${r.label}</summary><div class="inlinebody">${r.html()}</div></details>` : '';
+}
+app.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('inlineref')) refOpen = e.target.open; }, true);
+app.addEventListener('mouseover', (e) => { if (PACK && PACK.refHover) PACK.refHover(e); });
 
 function renderHome() {
   round = null;
@@ -179,6 +187,7 @@ function renderRound() {
   app.innerHTML = `
   <div class="rbar"><button class="link" data-act="home">‹ End session</button>${roundRefs()}<span class="progress">Problem ${round.i + 1} of ${round.n}</span></div>
   <div class="prob"><div class="eyebrow">${skill.name}</div><div class="qtext ${plain(p.q).length > 60 && p.q.indexOf('→') >= 0 ? 'eq' : ''}">${p.q}</div>${input}${help}${fb}${round.askOpen && state !== 'ask' && state !== 'bad' ? followHTML() : ''}</div>
+  ${inlineRefHTML(PACK.inlineRef && PACK.inlineRef(skill.id))}
   ${locked ? '' : '<div class="skiprow"><button class="link" data-act="skip">Skip this one</button><small>Ending the session keeps your progress.</small></div>'}`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('ans');
   if (nb) nb.focus(); else if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
@@ -257,6 +266,7 @@ app.addEventListener('click', (e) => {
     S.sections = S.sections.includes(z) ? S.sections.filter((x) => x !== z) : [...S.sections, z];
     save(); renderHome(); window.scrollTo(0, y); return;
   }
+  if (act.startsWith('s-')) return settingsAct(act, t);
   if (act.startsWith('c-')) return classAct(act, t);
   if (act.startsWith('d-')) return docAct(act, t);
   if (act.startsWith('m-')) return mineAct(act, t);

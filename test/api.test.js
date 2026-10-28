@@ -143,3 +143,34 @@ test('search ranks the chunk that shares rare words', () => {
   const r = search(docs, 'quadratic formula', 1);
   assert.match(r[0].text, /Quadratic formula/);
 });
+
+test('settings: saved keys override env, are masked, apply at once, and can be tested', async () => {
+  const before = (await call('GET', '/api/settings')).data;
+  assert.strictEqual(before.canEdit, true);
+  assert.strictEqual(before.providers.groq.keySource, 'env');
+  const put = await call('PUT', '/api/settings', { groq: { key: 'sk-secret-1234', smart: 'good' }, order: ['openrouter', 'groq'] });
+  assert.strictEqual(put.res.status, 200);
+  assert.strictEqual(put.data.providers.groq.keySource, 'app');
+  assert.strictEqual(put.data.providers.groq.keyHint, '…1234');
+  assert.ok(!put.text.includes('sk-secret'), 'the full key is never returned');
+  assert.deepStrictEqual(put.data.order, ['openrouter', 'groq']);
+  mockHits.length = 0;
+  assert.strictEqual((await call('POST', '/api/ai', { messages: [{ role: 'user', content: 'hi' }] })).data.text, 'answer from good');
+  assert.strictEqual(mockHits.length, 1, 'the new order is used straight away');
+  const t = (await call('POST', '/api/settings/test', { provider: 'groq' })).data;
+  assert.strictEqual(t.ok, true);
+  assert.strictEqual((await call('POST', '/api/settings/test', { provider: 'nope' })).res.status, 400);
+  const cleared = (await call('PUT', '/api/settings', { groq: { key: '' } })).data;
+  assert.strictEqual(cleared.providers.groq.keySource, 'env');
+});
+
+test('settings: locked when the server has no password', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-open-'));
+  const made = createApp(loadConfig({ DATA_DIR: dir, PUBLIC_DIR: dir }));
+  const s = await startServer(made.app);
+  const url = `http://127.0.0.1:${s.address().port}/api/settings`;
+  const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groq: { key: 'x' } }) });
+  assert.strictEqual(r.status, 403);
+  assert.strictEqual((await (await fetch(url)).json()).canEdit, false);
+  s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});

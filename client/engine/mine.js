@@ -115,6 +115,7 @@ function renderWork() {
       ${W.photo ? '<button class="link" data-act="m-nophoto">Remove photo</button>' : ''}${W.busy ? '<button class="link" data-act="m-stop">Stop</button>' : ''}</div>
     <div class="acts2"><small>Not sure where to start?</small><button class="link" data-act="m-start" ${W.busy ? 'disabled' : ''}>Show me the first step</button><button class="link" data-act="m-full" ${W.busy ? 'disabled' : ''}>Explain the whole thing</button>${smp && !showFollow ? '<button class="link" data-act="m-follow">Ask a question</button>' : ''}</div>
     ${resultHTML(x)}${showFollow ? followHTML() : ''}</div>
+  ${inlineRefHTML(PACK.homeworkRef)}
   <div class="skiprow"><button class="link" data-act="m-del">${W.delArmed ? 'Really delete? Click again' : 'Delete this problem'}</button>
     ${x.status === 'done' ? '' : '<button class="link" data-act="m-done">I got it, mark done</button>'}</div>`;
 }

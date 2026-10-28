@@ -5,7 +5,7 @@ A self-hosted study app. Each class is its own space with its own practice, home
 ## What it does
 
 - **Classes.** Create a space per course. Pick a subject (Chemistry, College Algebra, or Other) and describe the class; the tutor reads that description.
-- **Practice.** Chemistry and Algebra come with generated problem sets by skill. A daily practice set, per-skill mastery, a coach that reads your history, and a suggested study plan. Progress, rank and streak are shown quietly at the top of each class.
+- **Practice.** Chemistry and Algebra come with generated problem sets by skill. In chemistry, the periodic table (or the ion list) stays open under the problems that need it. A daily practice set, per-skill mastery, a coach that reads your history, and a suggested study plan. Progress, rank and streak are shown quietly at the top of each class.
 - **Homework.** Add a problem (typed or photographed). The AI finds the first step that went wrong and names the rule to use, without giving the answer unless you ask.
 - **Documents.** Upload photos, PDFs, Word files and text per class. "Find problems" pulls the problems out of them into your homework list, and the tutor searches your own notes when you ask a question.
 - **AI tutor.** Ask questions about the problem you are on or the course in general. Uses Groq and/or OpenRouter.
@@ -28,6 +28,8 @@ Set these in `.env`:
 | `GROQ_MODEL`, `GROQ_QUICK_MODEL`, `GROQ_VISION_MODEL`, `OPENROUTER_MODEL`, ... | Override the models. Model names change often, so check the provider catalogs if a call fails with a model error. Reading photos needs a vision-capable model. |
 | `COOKIE_SECURE`, `TRUST_PROXY` | Set both to `true` when serving over HTTPS behind a reverse proxy. |
 | `PORT`, `MAX_UPLOAD_MB` | Published port and per-file upload limit. |
+
+You can also set keys, provider order and models from the app: class list, **AI settings**. Values saved there are stored in the server's database (plain text, like `.env`), override the environment, apply immediately, and have a **Save and test** button. Editing is only allowed when `APP_PASSWORD` is set.
 
 With no AI keys the app still works for practice; checking, explaining and the tutor are switched off.
 

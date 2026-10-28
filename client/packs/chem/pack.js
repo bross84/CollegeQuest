@@ -1,6 +1,11 @@
 // What the engine needs to know about this subject. Must be last: it returns the pack.
+// Which reference to keep open under a practice problem: the periodic table for anything that needs masses, groups or
+// charges, the ion list for polyatomic-ion skills, nothing for the rest (balancing, solubility, ...).
+const WITH_TABLE = new Set(['valelec', 'lewis', 'geometry', 'bondangle', 'molname', 'bondbasics', 'ioncharge', 'oxnum', 'redox', 'molmass', 'moleconv', 'avogadro', 'stoich', 'limiting']);
+const WITH_IONS = new Set(['ionformula', 'ionname', 'ioncompound']);
 const refHover = (e) => {
-  const c = e.target.closest && e.target.closest('.ptc[data-z]'), box = document.getElementById('ptinfo');
+  const c = e.target.closest && e.target.closest('.ptc[data-z]');
+  const box = c && (c.closest('.inlineref, #ovbody') || document).querySelector('.ptinfo');
   if (c && c.dataset.z && box) { box.textContent = ptInfo(+c.dataset.z); return true; }
   return false;
 };
@@ -20,6 +25,8 @@ return {
   fmt: (s) => esc(s).replace(/([A-Za-z)])(\d+)/g, '$1<sub>$2</sub>').replace(/\^(\([^)]*\)|-?\w+)/g, (m, e) => `<sup>${e.replace(/^\(|\)$/g, '')}</sup>`).replace(/sqrt\(/g, '√('),
   refs: [{ k: 'pt', label: 'Periodic table', html: ptHTML }, { k: 'ions', label: 'Polyatomic ions', html: ionsHTML }],
   refHover,
+  inlineRef: (skillId) => (WITH_TABLE.has(skillId) ? 'pt' : WITH_IONS.has(skillId) ? 'ions' : null),
+  homeworkRef: 'pt',
   tutor: { role: 'chemistry', style: 'Name the procedure or rule to apply (for example "convert grams to moles first" or "balance the O last"). The goal is exam-ready procedural fluency.' },
   ask: {
     format: 'Write chemical formulas like H2SO4 and charges like SO4^2-.',

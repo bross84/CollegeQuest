@@ -29,16 +29,16 @@ function createThinkFilter() {
   };
 }
 
-function createAi(cfg) {
-  const { providers, order } = cfg.ai;
-  const active = () => order.filter((n) => providers[n] && providers[n].key);
+function createAi(cfg, getAi) {
+  const cur = () => (getAi ? getAi() : cfg.ai);
+  const active = () => cur().order.filter((n) => cur().providers[n] && cur().providers[n].key);
 
   function status() {
     const names = active();
     return {
       configured: names.length > 0,
       providers: names,
-      images: names.some((n) => !!providers[n].vision),
+      images: names.some((n) => !!cur().providers[n].vision),
     };
   }
 
@@ -54,7 +54,7 @@ function createAi(cfg) {
 
   // messages: [{role, content}], images: data URLs attached to the last user message.
   async function callProvider(name, { messages, images, quick, stream, signal, onDelta }) {
-    const p = providers[name];
+    const p = cur().providers[name];
     const model = images.length ? p.vision : quick ? p.quick : p.smart;
     const msgs = messages.map((m) => ({ role: m.role, content: m.content }));
     if (images.length) {
@@ -63,12 +63,12 @@ function createAi(cfg) {
       msgs[i] = { role: 'user', content: [{ type: 'text', text: String(msgs[i].content) }, ...images.map((u) => ({ type: 'image_url', image_url: { url: u } }))] };
     }
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(new AiError('ai_timeout', 'The AI took too long to answer.', 504)), cfg.ai.timeoutMs);
+    const timer = setTimeout(() => ctl.abort(new AiError('ai_timeout', 'The AI took too long to answer.', 504)), cur().timeoutMs);
     const onAbort = () => ctl.abort(signal.reason);
     if (signal) { if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true }); }
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key}` };
     if (name === 'openrouter') { headers['HTTP-Referer'] = 'https://github.com/collegequest'; headers['X-Title'] = 'CollegeQuest'; }
-    const body = { model, messages: msgs, temperature: 0.3, max_tokens: cfg.ai.maxTokens, stream: !!stream };
+    const body = { model, messages: msgs, temperature: 0.3, max_tokens: cur().maxTokens, stream: !!stream };
     if (name === 'groq' && /gpt-oss|qwen3|deepseek/i.test(model)) body.reasoning_format = 'hidden';
     const filter = createThinkFilter();
     let text = '';
@@ -118,8 +118,9 @@ function createAi(cfg) {
   }
 
   async function chat(opts) {
-    const names = active().filter((n) => !(opts.images || []).length || providers[n].vision);
-    if (!active().length) throw new AiError('ai_unavailable', 'No AI provider is configured on the server.', 503);
+    const keyed = active().filter((n) => !opts.only || n === opts.only);
+    if (!keyed.length) throw new AiError('ai_unavailable', opts.only ? 'No API key is set for that provider.' : 'No AI provider is configured on the server.', 503);
+    const names = keyed.filter((n) => !(opts.images || []).length || cur().providers[n].vision);
     if (!names.length) throw new AiError('images_unavailable', 'No configured provider can read images.', 400);
     let last;
     for (const n of names) {
