@@ -7,6 +7,11 @@ const species = (s) => s.replace(/^\d+\s*/, '').replace(/\((s|l|g|aq)\)$/, '');
 const TYPES = {
   precip: 'Precipitation', acid: 'Acid-base (neutralization)', redox: 'Oxidation-reduction (redox)',
 };
+const RXN_ACCEPT = {
+  precip: ['Precipitation', 'precipitate', 'precipitation reaction', 'precip', 'ppt'],
+  acid: ['Acid-base (neutralization)', 'acid-base', 'acid base reaction', 'neutralization', 'neutralisation'],
+  redox: ['Oxidation-reduction (redox)', 'redox', 'oxidation-reduction', 'oxidation reduction'],
+};
 const RXN_TYPES = [
   ['precip', 'AgNO3(aq) + NaCl(aq) → AgCl(s) + NaNO3(aq)', 'Two aqueous ionic compounds swap partners and one product is a solid: (s).'],
   ['precip', 'BaCl2(aq) + Na2SO4(aq) → BaSO4(s) + 2 NaCl(aq)', 'Two aqueous ionic compounds swap partners and BaSO4 is the solid.'],
@@ -71,7 +76,8 @@ SKILLS.push(
   gen() {
     const [k, eq, why] = pick(RXN_TYPES), ans = TYPES[k];
     const m = mc(ans, Object.values(TYPES).filter((x) => x !== ans));
-    return { q: `${showEq(eq)}<br>What type of reaction is this?`, type: 'choice', choices: m.choices, answer: m.answer, steps: [why, `<b>${ans}</b>`] };
+    return { q: `${showEq(eq)}<br>What type of reaction is this?`, type: 'choice', choices: m.choices, answer: m.answer, steps: [why, `<b>${ans}</b>`],
+      typed: { type: 'text', accept: RXN_ACCEPT[k], ph: 'e.g. redox', hint: '<br><small>For example: redox, precipitation, acid-base</small>' } };
   },
 },
 {

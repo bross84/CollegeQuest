@@ -21,6 +21,21 @@ const GEOS = ['Linear', 'Trigonal planar', 'Bent', 'Tetrahedral', 'Pyramidal'];
 // Shape and angle are always shown together so they get learned as a pair.
 const GA = [['Linear', 180], ['Trigonal planar', 120], ['Bent', 120], ['Bent', 104.5], ['Tetrahedral', 109.5], ['Pyramidal', 107]];
 const gaLabel = (n, a) => `${n}, ${a}°`;
+// Typed geometry + angle, forgiving about wording: "tetra 109", "trig planar 120", "bent 104.5".
+const GEOM_WORDS = [['Pyramidal', /^pyr/], ['Tetrahedral', /^tet/], ['Trigonal planar', /^(plan|trig|tri$|tp$)/], ['Linear', /^lin/], ['Bent', /^(ben|ang|v$|vsh)/]];
+function checkShape(raw, geom, angle) {
+  const s = String(raw).toLowerCase().replace(/[°º]|degrees?/g, ' ');
+  const nums = (s.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  const words = s.replace(/\d+(?:\.\d+)?/g, ' ').split(/[^a-z]+/).filter(Boolean);
+  if (!words.length || !nums.length) return null; // need both a shape and an angle
+  const hit = GEOM_WORDS.find(([, re]) => words.some((w) => re.test(w)));
+  return !!hit && hit[0] === geom && nums.some((n) => Math.abs(n - angle) <= 1.5);
+}
+const shapeTyped = (g) => ({
+  type: 'shape', ph: 'e.g. tetra 109', check: (raw) => checkShape(raw, g.g, g.a), shownAns: gaLabel(g.g, g.a),
+  badInput: 'Type the shape and the angle, like “tetra 109”.',
+  hint: '<br><small>For example: tetra 109 (a short name and the angle are fine)</small>',
+});
 const gaChoices = (g, byAngle) => mc(gaLabel(g.g, g.a), GA.filter(([n, a]) => (byAngle ? a !== g.a : n !== g.g)).map(([n, a]) => gaLabel(n, a)));
 function geo(m) {
   const clouds = m.lig.length + m.lp;
@@ -139,11 +154,11 @@ SKILLS.push(
       const lp = pick([0, 0, 1, 1, 2]), bonds = pick([2, 3, 4]), clouds = bonds + lp;
       if (clouds > 4) return this.gen();
       const g = geo({ lig: Array(bonds).fill(['X', 1]), lp }), mm = gaChoices(g);
-      return { q: `A central atom has <b>${bonds}</b> bonded atoms and <b>${lp}</b> lone pair${lp === 1 ? '' : 's'}. What is the geometry and bond angle?`, type: 'choice', choices: mm.choices, answer: mm.answer,
+      return { q: `A central atom has <b>${bonds}</b> bonded atoms and <b>${lp}</b> lone pair${lp === 1 ? '' : 's'}. What is the geometry and bond angle?`, type: 'choice', choices: mm.choices, answer: mm.answer, typed: shapeTyped(g),
         steps: [`Charge clouds: ${bonds} + ${lp} = ${clouds}.`, `<b>${g.g}, ${g.a}°</b>`] };
     }
     const m = pick(MOLS), g = geo(m), mm = gaChoices(g);
-    return { q: `What is the geometry and bond angle around the central atom of ${label(m)}?`, type: 'choice', choices: mm.choices, answer: mm.answer,
+    return { q: `What is the geometry and bond angle around the central atom of ${label(m)}?`, type: 'choice', choices: mm.choices, answer: mm.answer, typed: shapeTyped(g),
       steps: [`Lewis structure: ${m.c} is bonded to ${m.lig.length} atom${m.lig.length > 1 ? 's' : ''}${m.lig.some(([, o]) => o > 1) ? ' (double/triple bonds count as one cloud)' : ''} and has ${m.lp} lone pair${m.lp === 1 ? '' : 's'}.`, `Charge clouds: ${m.lig.length} + ${m.lp} = ${g.clouds}.`, `<b>${g.g}, ${g.a}°</b>`] };
   },
 },
@@ -154,7 +169,7 @@ SKILLS.push(
   video: 'bond angles for molecular geometries 180 120 109.5',
   gen() {
     const m = pick(MOLS), g = geo(m), ans = gaLabel(g.g, g.a), mm = gaChoices(g, true);
-    return { q: `What are the geometry and approximate bond angle in ${label(m)}?`, type: 'choice', choices: mm.choices, answer: mm.answer, steps: [`${label(m)} is <b>${g.g}</b> (${g.clouds} charge clouds).`, `Answer: <b>${ans}</b>`] };
+    return { q: `What are the geometry and approximate bond angle in ${label(m)}?`, type: 'choice', choices: mm.choices, answer: mm.answer, typed: shapeTyped(g), steps: [`${label(m)} is <b>${g.g}</b> (${g.clouds} charge clouds).`, `Answer: <b>${ans}</b>`] };
   },
 },
 {

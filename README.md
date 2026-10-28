@@ -5,7 +5,7 @@ A self-hosted study app. Each class is its own space with its own practice, home
 ## What it does
 
 - **Classes.** Create a space per course. Pick a subject (Chemistry, College Algebra, or Other) and describe the class; the tutor reads that description.
-- **Practice.** Chemistry and Algebra come with generated problem sets by skill. In chemistry, the periodic table (or the ion list) stays open under the problems that need it. A daily practice set, per-skill mastery, a coach that reads your history, and a suggested study plan. Progress, rank and streak are shown quietly at the top of each class.
+- **Practice.** Chemistry and Algebra come with generated problem sets by skill. Answers are typed first (short and fuzzy: "tetra 109" works), and a miss shows multiple choice; you can switch to typed-only or choice-only. In chemistry, the periodic table (or the ion list) stays open under the problems that need it. A daily practice set, per-skill mastery, a coach that reads your history, and a suggested study plan. Progress, rank and streak are shown quietly at the top of each class.
 - **Homework.** Add a problem (typed or photographed). The AI finds the first step that went wrong and names the rule to use, without giving the answer unless you ask.
 - **Documents.** Upload photos, PDFs, Word files and text per class. "Find problems" pulls the problems out of them into your homework list, and the tutor searches your own notes when you ask a question.
 - **AI tutor.** Ask questions about the problem you are on or the course in general. Uses Groq and/or OpenRouter.

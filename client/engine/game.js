@@ -1,7 +1,7 @@
 // Game state, storage, scoring, and problem selection. No DOM in here.
 // The class being studied (name, exam, notes) and its subject pack (skills, ranks, wording). Set when a class is opened.
 let PACK = null, CLASS = null;
-const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'choice' });
+const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both' });
 let S = fresh();
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -172,9 +172,10 @@ const normT = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 const normF = (s) => (PACK.normF ? PACK.normF(s) : String(s).trim());
 // Returns true, false, or null when the input cannot be read as an answer.
 function checkAnswer(p, raw) {
+  if (p.check) return p.check(raw); // problems can bring their own forgiving checker
   if (p.type === 'choice') return raw === p.answer;
-  if (p.type === 'num') { const v = parseNum(raw); return Number.isNaN(v) ? null : near(v, p.answer, p.tol); }
-  if (p.type === 'text') { const v = normT(raw); return v ? p.accept.some((a) => normT(a) === v || normT(a) + 'ion' === v) : null; }
+  if (p.type === 'num') { const v = PACK.looseUnits ? parseNumLoose(raw) : parseNum(raw); return Number.isNaN(v) ? null : near(v, p.answer, p.tol); }
+  if (p.type === 'text') { const v = normT(raw); return v ? p.accept.some((a) => { const n = normT(a); return n === v || n + 'ion' === v || (n.length >= 9 && lev(n, v) <= 1); }) : null; } // one slipped letter is forgiven in long names
   if (p.type === 'formula') { const v = normF(raw); return v ? p.accept.includes(v) : null; }
   if (p.type === 'seq') {
     const v = String(raw).split(/[\s,;]+/).filter(Boolean).map(parseNum);
@@ -188,6 +189,7 @@ function checkAnswer(p, raw) {
   return got.length === want.length && got.every((x, i) => x === want[i]);
 }
 function answerText(p) {
+  if (p.shownAns) return p.shownAns;
   if (PACK.answerText && (p.type === 'num' || p.type === 'pair' || p.type === 'list')) return PACK.answerText(p);
   if (p.type === 'choice') return p.choices[p.answer];
   if (p.type === 'num') return Number.isInteger(p.answer) ? String(p.answer) : +p.answer.toPrecision(4) + '';
@@ -208,6 +210,7 @@ const fmtNum = (x) => {
 };
 const TYPING_HINT = /<br><small>(?:Scientific notation|Coefficients in order|For example|Like |Fractions like)[^<]*<\/small>/g;
 function toChoice(p) {
+  if (p.alt) return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: p.alt.choices, answer: p.alt.answer, check: null, shownAns: null, alt: null };
   if (p.type === 'choice' || !p.wrongs) return p;
   const f = p.type === 'num' ? (p.fmtAns || fmtNum) : p.type === 'seq' ? (a) => a.join(', ') : p.type === 'text' ? cap : (s) => s;
   const right = p.type === 'num' ? p.answer : p.type === 'seq' ? p.answer : p.type === 'text' ? p.accept[0] : p.shown;
@@ -222,7 +225,30 @@ function toChoice(p) {
   const m = mc(correct, shuffle(w).slice(0, 3));
   return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: m.choices, answer: m.answer };
 }
-const newProblem = (skill) => (S.style === 'type' ? skill.gen() : toChoice(skill.gen()));
+// Answer style: 'both' = type first (choices appear after a miss), 'type' = typed only, 'choice' = multiple choice only.
+const STYLES = ['both', 'type', 'choice'];
+const STYLE_LABEL = { both: 'Answers: type first, choices after a miss', type: 'Answers: typed only', choice: 'Answers: multiple choice only' };
+// A choice-only problem can carry a `typed` alternative ({ type, check or accept, hint, ... }). Used when answers are typed;
+// the original choices are kept in `alt` so a miss can still fall back to them.
+const asTyped = (p) => (p.type === 'choice' && p.typed ? { ...p, ...p.typed, q: p.q + (p.typed.hint || ''), alt: { choices: p.choices, answer: p.answer } } : p);
+const newProblem = (skill) => (S.style === 'choice' ? toChoice(skill.gen()) : asTyped(skill.gen()));
+
+// Edit distance (small strings), for forgiving a slipped letter in a typed name.
+function lev(a, b) {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return d[b.length];
+}
+// "18.02 g/mol", "3.5 x 10^23 molecules", "109°": a number followed by a unit still counts as that number.
+function parseNumLoose(raw) {
+  const v = parseNum(raw);
+  if (!Number.isNaN(v)) return v;
+  const m = String(raw).trim().match(/^([-+−–]?\s*(?:\d[\d,]*\.?\d*|\.\d+)(?:\s*[x×*]\s*10\s*\^?\s*[-−–]?\d+|e[+-]?\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?)\s*(?=[a-zA-Zµ°%])/);
+  return m ? parseNum(m[1]) : NaN;
+}
 // Generators are random, so a skill with few variations can repeat itself. Remember what was shown and draw again:
 // first avoid anything from the last 40 problems, then the last 10, and never the one just before.
 const recentQs = [];

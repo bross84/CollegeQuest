@@ -59,7 +59,7 @@ function renderHome() {
 const refHTML = () => {
   const btns = [...PACK.refs.map((r) => `<button class="btn alt sm" data-act="ref" data-k="${r.k}">${r.label}</button>`),
     '<button class="btn alt sm" data-act="ref" data-k="ask">Ask a question</button>',
-    PACK.hasChoiceMode ? `<button class="btn alt sm" data-act="style">${S.style === 'type' ? 'Answers: typed. Tap for multiple choice' : 'Answers: multiple choice. Tap to type'}</button>` : ''];
+    PACK.hasChoiceMode ? `<button class="btn alt sm" data-act="style" title="Tap to change">${STYLE_LABEL[S.style] || STYLE_LABEL.both}</button>` : ''];
   return `<section class="zone"><h3>Reference</h3><div class="row2">${btns.join('')}</div></section>`;
 };
 const roundRefs = () => [...PACK.refs.map((r) => `<button class="link" data-act="ref" data-k="${r.k}">${r.label}</button>`), '<button class="link" data-act="ref" data-k="ask">Ask</button>'].join('');
@@ -150,7 +150,7 @@ const startMixed = (n) => startRound(pickMixed(n), 'set', null);
 function nextProblem() {
   round.skill = SKILLS.find((s) => s.id === round.ids[round.i]);
   round.p = freshProblem(round.skill);
-  round.tries = 0; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = '';
+  round.tries = 0; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = ''; round.hinted = null;
   renderRound();
 }
 
@@ -162,15 +162,15 @@ function renderRound() {
     input = `<div class="choices ${p.choices.some((c) => plain(c).length > 34) ? 'wide' : ''}">${p.choices.map((c, i) => `<button class="choice ${locked && i === p.answer ? 'right' : ''}" data-act="pick" data-c="${i}" ${locked || round.wrong.includes(i) ? 'disabled' : ''}>${c}</button>`).join('')}</div>`;
   } else {
     input = `<form class="answer" id="af" autocomplete="off"><input id="ans" type="text" inputmode="text" enterkeyhint="done" autocapitalize="off" spellcheck="false"
-      aria-label="Your answer" value="${esc(round.typed)}" ${locked ? 'disabled' : ''} placeholder="${(PACK.ph || {})[p.type] || 'your answer'}">
+      aria-label="Your answer" value="${esc(round.typed)}" ${locked ? 'disabled' : ''} placeholder="${esc(p.ph || (PACK.ph || {})[p.type] || 'your answer')}">
       ${locked ? '' : '<button class="btn" type="submit">Check</button>'}</form>`;
   }
   const last = round.i === round.n - 1;
   const help = state === 'ask' || state === 'bad'
-    ? '<div class="help"><button class="btn alt sm" data-act="show">I don’t know this one. Explain it</button></div>' : '';
+    ? `<div class="help"><button class="btn alt sm" data-act="show">I don’t know this one. Explain it</button>${canChoices(p) ? '<button class="link" data-act="choices">Show choices</button>' : ''}</div>` : '';
   let fb = '';
-  if (state === 'bad') fb = `<div class="fb no" role="status"><p>${PACK.badInput}</p></div>`;
-  if (state === 'no') fb = `<div class="fb no" role="status"><h3>Not yet.</h3><p><b>Use:</b> ${skill.rule}</p><p>${skill.tip}</p>
+  if (state === 'bad') fb = `<div class="fb no" role="status"><p>${p.badInput || PACK.badInput}</p></div>`;
+  if (state === 'no') fb = `<div class="fb no" role="status"><h3>Not yet.</h3>${round.hinted ? `<p>You typed <b>${esc(round.hinted)}</b>. Pick the right one from these choices.</p>` : ''}<p><b>Use:</b> ${skill.rule}</p><p>${skill.tip}</p>
     <div class="acts"><button class="btn" data-act="retry">Try again</button><button class="link" data-act="show">Show me the steps</button><button class="link" data-act="follow">${round.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>
     <a class="link" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=${encodeURIComponent(skill.video)}">Find a video on this</a></div></div>`;
   if (state === 'right') {
@@ -200,6 +200,7 @@ function submit(raw) {
   if (!ok) {
     round.tries++; round.state = 'no'; round.typed = raw;
     if (p.type === 'choice') round.wrong.push(raw);
+    else if (S.style === 'both') showChoices(raw); // missed a typed answer: offer the choices
     return renderRound();
   }
   const kind = round.tries === 0 ? 'first' : 'retry';
@@ -208,6 +209,13 @@ function submit(raw) {
   round.fb = { kind };
   round.state = 'right';
   renderRound();
+}
+// Turn the typed problem into multiple choice (same question, same answer). Does nothing when it has too few wrong answers to offer.
+const canChoices = (p) => p.type !== 'choice' && S.style !== 'type' && toChoice(p) !== p;
+function showChoices(typed) {
+  const c = toChoice(round.p);
+  if (c === round.p) return;
+  round.p = c; round.wrong = []; round.hinted = typed || null;
 }
 function showSteps() {
   record(round.skill.id, 'miss');
@@ -218,7 +226,7 @@ function showSteps() {
 }
 // After reading the steps: a fresh problem of the same skill in the same slot. A correct answer counts as a retry.
 function similar() {
-  round.p = freshProblem(round.skill); round.tries = 1; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = '';
+  round.p = freshProblem(round.skill); round.tries = 1; round.askOpen = false; round.state = 'ask'; round.wrong = []; round.fb = null; round.typed = ''; round.hinted = null;
   renderRound();
 }
 function advance() {
@@ -251,7 +259,7 @@ app.addEventListener('click', (e) => {
   if (act !== 'reset' && resetArmed) resetArmed = false;
   if (act === 'follow') { round.askOpen = !round.askOpen; renderRound(); const f = document.getElementById('ftext'); if (round.askOpen && f) f.focus(); return; }
   if (act === 'ref') return openRef(t.dataset.k);
-  if (act === 'style') { const y = window.scrollY; S.style = S.style === 'type' ? 'choice' : 'type'; save(); renderHome(); window.scrollTo(0, y); return; }
+  if (act === 'style') { const y = window.scrollY; S.style = STYLES[(STYLES.indexOf(S.style) + 1) % STYLES.length]; save(); renderHome(); window.scrollTo(0, y); return; }
   if (act === 'tplan') {
     const b = S.today && S.today.blocks[+t.dataset.i];
     if (!b) return;
@@ -278,6 +286,7 @@ app.addEventListener('click', (e) => {
   else if (act === 'pick') submit(+t.dataset.c);
   else if (act === 'retry') { round.state = 'ask'; renderRound(); }
   else if (act === 'show') showSteps();
+  else if (act === 'choices') { showChoices(null); round.tries = Math.max(round.tries, 1); renderRound(); } // looking at choices means it no longer counts as first try
   else if (act === 'similar') similar();
   else if (act === 'skip') { round.results[round.i] = 'skip'; advance(); }
   else if (act === 'next') advance();
