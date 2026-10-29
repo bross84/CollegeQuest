@@ -145,7 +145,7 @@ function guideBodyHTML(g) {
     <div class="acts">${g.cards.length ? `<button class="btn" data-act="g-quiz" data-id="${g.id}">Quiz me (${plural(g.cards.length, 'question')})</button>` : ''}<button class="link" data-act="g-print">Print</button><button class="link" data-act="g-del" data-id="${g.id}">${GV.delArmed ? 'Really delete? Click again' : 'Delete'}</button></div>
     <small>Written by the AI from your documents, so check anything important against the book.</small></div>
   ${toc}
-  ${sec || '<section class="zone"><small>This guide has questions but no written sections.</small></section>'}`;
+  <div class="gsecs">${sec || '<section class="zone"><small>This guide has questions but no written sections.</small></section>'}</div>`;
 }
 app.addEventListener('click', (e) => {
   const b = e.target.closest('[data-toc]');

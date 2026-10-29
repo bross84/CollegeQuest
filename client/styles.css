@@ -285,9 +285,10 @@ form[data-form] .field { margin-bottom: -6px; }
 @media (max-width: 560px) { .gterms { grid-template-columns: 1fr; gap: 0; } .gterms dd { margin-bottom: 8px; } }
 
 /* notebook shell: chapter sidebar on a wide screen, a picker on a phone */
-.wrap:has(.shell) { max-width: 1180px; }
-.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 36px; align-items: start; }
-.pane { min-width: 0; max-width: 780px; }
+.wrap:has(.shell) { max-width: 1520px; }
+.shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 40px; align-items: start; }
+.pane { min-width: 0; }
+.pane .lead, .pane .empty p, .gsec p { max-width: 75ch; }
 .picker { display: none; }
 .side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 4px; }
 .sbrand { margin-bottom: 12px; }
@@ -390,3 +391,44 @@ select.line { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px 
 select.line:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 select.line.sm { padding: 5px 8px; font-size: .9rem; }
 .lead + .answer { margin-top: 12px; }
+
+/* spacing pass */
+.tabs { overflow-y: hidden; border-bottom: 0; box-shadow: inset 0 -1px var(--line); }
+.tab { margin-bottom: 0; }
+.tabbody { gap: 18px; }
+.tabbody > .answer, .tabbody > .row2 { gap: 10px 12px; }
+.answer .btn, .answer select.line, .row2 .btn { min-height: 42px; }
+.btn.sm, select.line.sm { min-height: 34px; }
+.btn.sm { display: inline-flex; align-items: center; }
+.docrow { padding: 14px 16px; gap: 12px; margin-bottom: 10px; }
+.docrow .dtop { gap: 6px 10px; align-items: center; }
+.docrow .dact { gap: 10px 14px; }
+.docrow .dact .link { padding: 6px 2px; }
+.pane section.zone { margin-top: 32px; }
+.tabbody > section.zone { margin-top: 8px; }
+.zone > .row2, .zone > .mine, .zone > .bulk { margin-bottom: 12px; }
+.zone .row2 { gap: 10px 12px; }
+.mine { gap: 10px; }
+.prow { gap: 12px; }
+.prob > .acts { margin-top: 2px; }
+.prob > .acts .btn + .link { margin-left: 4px; }
+.gsact { gap: 6px 18px; margin-top: 4px; }
+.gsec { padding: 20px 24px; margin-top: 16px; }
+.fb .acts { gap: 10px 16px; margin-top: 8px; }
+.empty .btn { margin-top: 4px; }
+.chhead { margin-bottom: 4px; }
+.picker { gap: 10px; }
+
+/* use the whole window: fluid shell, lists and sections in columns */
+.wrap:has(.shell) { max-width: none; padding-inline: clamp(18px, 3vw, 56px); }
+.shell { grid-template-columns: 280px minmax(0, 1fr); }
+.chlist, .plist, .docs, .gsecs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 10px 14px; align-items: start; }
+.docs { grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); }
+.docs .docrow { margin-bottom: 0; }
+.gsecs { grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); gap: 16px; }
+.gsecs .gsec { margin-top: 0; }
+.ovcols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 40px; align-items: start; }
+@media (min-width: 1300px) { .ovcols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .ovcol > section.zone:first-child { margin-top: 0; } }
+.toc ol { columns: 3 220px; }
+.gsact .videos { flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.gsact .vthumbs { flex-basis: 100%; }

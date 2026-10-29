@@ -134,16 +134,13 @@ function overviewHTML() {
     return `<a class="mine-item chcard" href="${chHash(c.id)}"><span><b>${esc(c.title)}</b><small>${bits.join(' · ') || 'Empty so far'}</small></span>${n ? `<span class="pill todo">${plural(n, 'question')} due</span>` : ''}</a>`;
   };
   const list = [...CHAPTERS, ...(unsortedCount() ? [UNSORTED] : [])];
-  const chapters = `<section class="zone"><h3>Chapters${CHAPTERS.length ? ` &middot; ${CHAPTERS.length}` : ''}</h3>${list.length ? `<div class="mine">${list.map(chapterCard).join('')}</div>` : ''}
+  const chapters = `<section class="zone"><h3>Chapters${CHAPTERS.length ? ` &middot; ${CHAPTERS.length}` : ''}</h3>${list.length ? `<div class="mine chlist">${list.map(chapterCard).join('')}</div>` : ''}
     ${CHAPTERS.length ? '' : `<div class="empty"><p>Chapters hold the materials, study guide, practice and tutor for one part of the course.</p><button class="btn big" data-act="ch-add">Add your first chapter</button></div>`}</section>`;
   TUTOR_CTX = { id: 'class', title: 'Course overview' };
   const tutor = `<section class="zone"><h3>Ask the tutor</h3>${followHTML({ title: 'About the whole course', placeholder: `Ask anything about ${CLASS.name}…` })}</section>`;
   return `<h1 class="ptitle">${esc(CLASS.name)}</h1>
   ${examHTML()}
-  ${due}
-  ${SKILLS.length ? todayHTML() + coachHTML() : ''}
-  ${chapters}
-  ${tutor}
+  <div class="ovcols"><div class="ovcol">${due}${SKILLS.length ? todayHTML() + coachHTML() : ''}${tutor}</div><div class="ovcol">${chapters}</div></div>
   <div class="foot"><span>${standLine()} <small id="syncnote">${syncNote()}</small></span>
     <span>${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
 }
