@@ -378,7 +378,8 @@ function createApp(cfg) {
   });
   api.post('/classes/:id/problems', express.json({ limit: '4mb' }), (req, res) => {
     if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
-    const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body]).slice(0, 200);
+    const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body])
+    .slice(0, 200);
     const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const made = [];
     for (const p of list) {
@@ -401,6 +402,30 @@ function createApp(cfg) {
   api.delete('/problems/:id', (req, res) => {
     const r = db.prepare('DELETE FROM problems WHERE id = ?').run(req.params.id);
     if (!r.changes) return res.status(404).json({ error: 'No such problem.' });
+    res.json({ ok: true });
+  });
+
+  // ---- study sets: a saved list of bank problems (a chapter's study set, or an exam built across chapters) ----
+  const SRC = ['exam', 'book', 'ai'];
+  const setOut = (r) => ({ id: r.id, classId: r.class_id, kind: r.kind, title: r.title, chapterIds: JSON.parse(r.chapter_ids), items: JSON.parse(r.items), createdAt: r.created_at });
+  api.get('/classes/:id/sets', (req, res) => {
+    if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
+    res.json(db.prepare('SELECT * FROM studysets WHERE class_id = ? ORDER BY created_at DESC, rowid DESC').all(req.params.id).map(setOut));
+  });
+  api.post('/classes/:id/sets', express.json({ limit: '1mb' }), (req, res) => {
+    if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
+    const b = req.body || {}, mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(req.params.id).map((r) => r.id));
+    const items = (Array.isArray(b.items) ? b.items : []).filter((x) => x && mine.has(x.id)).slice(0, 200)
+      .map((x) => ({ id: x.id, src: SRC.includes(x.src) ? x.src : 'book', key: clip(x.key, 500) }));
+    if (!items.length) return res.status(400).json({ error: 'A set needs at least one problem.' });
+    const id = newId(), chapters = (Array.isArray(b.chapterIds) ? b.chapterIds : []).map((c) => chapterOf(req.params.id, c)).filter(Boolean);
+    db.prepare('INSERT INTO studysets (id, class_id, kind, title, chapter_ids, items, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, req.params.id, b.kind === 'exam' ? 'exam' : 'chapter', clip(b.title, 120) || 'Study set', JSON.stringify(chapters), JSON.stringify(items), Date.now());
+    res.status(201).json(setOut(db.prepare('SELECT * FROM studysets WHERE id = ?').get(id)));
+  });
+  api.delete('/sets/:id', (req, res) => {
+    const r = db.prepare('DELETE FROM studysets WHERE id = ?').run(req.params.id);
+    if (!r.changes) return res.status(404).json({ error: 'No such set.' });
     res.json({ ok: true });
   });
 

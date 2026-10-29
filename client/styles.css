@@ -484,3 +484,10 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .pane > .chhead { margin-bottom: 0; }
 .pane > .tabs { margin: 0; }
 .pane > .tabbody { margin-top: 2px; }
+/* the problem bank, tucked under the chapter's study set */
+.bankbox { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 0 14px; }
+.bankbox summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+.bankbox summary small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.bankbox[open] { padding-bottom: 14px; }
+.bankbox[open] > :not(summary) { margin-top: 10px; }
+.xch { display: flex; flex-wrap: wrap; gap: 8px 18px; }

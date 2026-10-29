@@ -294,6 +294,23 @@ test('problems: a class bank files each problem under its own chapter, or none, 
   assert.strictEqual((await call('GET', '/api/classes/nope/problems')).res.status, 404);
 });
 
+test('study sets: saved as a list of this class problems, retaken or deleted later', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Set class', pack: 'general' })).data;
+  const other = (await call('POST', '/api/classes', { name: 'Other set class', pack: 'general' })).data;
+  const ch = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Ch 1' })).data;
+  const mine = (await call('POST', `/api/classes/${cls.id}/problems`, { problems: [{ text: 'Q1', chapterId: ch.id }, { text: 'Q2' }] })).data;
+  const theirs = (await call('POST', `/api/classes/${other.id}/problems`, { problems: [{ text: 'Q3' }] })).data;
+  assert.strictEqual((await call('POST', `/api/classes/${cls.id}/sets`, { items: [{ id: theirs[0].id }] })).res.status, 400); // another class's problem
+  const made = await call('POST', `/api/classes/${cls.id}/sets`, { title: 'Ch 1 study set', kind: 'exam', chapterIds: [ch.id, 'bogus'], items: [{ id: mine[1].id, src: 'ai', key: '7' }, { id: mine[0].id, src: 'nope' }, { id: theirs[0].id }] });
+  assert.strictEqual(made.res.status, 201);
+  assert.deepStrictEqual(made.data.items, [{ id: mine[1].id, src: 'ai', key: '7' }, { id: mine[0].id, src: 'book', key: '' }]);
+  assert.deepStrictEqual(made.data.chapterIds, [ch.id]);
+  assert.strictEqual(made.data.kind, 'exam');
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/sets`)).data.length, 1);
+  assert.strictEqual((await call('DELETE', `/api/sets/${made.data.id}`)).res.status, 200);
+  assert.strictEqual((await call('DELETE', `/api/sets/${made.data.id}`)).res.status, 404);
+});
+
 test('videos: falls back without a key, then serves from the cache and from a live search', async () => {
   assert.strictEqual((await call('GET', '/api/videos')).res.status, 400);
   assert.deepStrictEqual((await call('GET', '/api/videos?q=factoring')).data, { videos: [], fallback: true });
@@ -350,6 +367,6 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.chapterId, null);
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 6);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });

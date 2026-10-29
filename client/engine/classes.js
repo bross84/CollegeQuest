@@ -124,11 +124,12 @@ async function enterClass(c) {
     SKILLS.length = 0; SKILLS.push(...PACK.skills);
     ASK.turns = []; ASK.key = '';
     delete DASH[c.id]; dashTried.delete(c.id); // its progress will have changed by the time we come back
-    CHAPTERS = []; PROBS = {}; PLOADED = false; XS.ch.clear(); XS.init = false; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
+    CHAPTERS = []; PROBS = {}; PLOADED = false; SETS = []; SS.tpl = null; READ_TRIED.clear(); XS.ch.clear(); XS.init = false; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
     await loadState();
     await loadDocs();
     await loadGuides();
     await loadChapters();
+    await loadSets();
     LS.set('cq-last', c.id);
     const r = parseRoute();
     if (!r || r.cid !== c.id) history.pushState(null, '', '#/class/' + c.id); // a bookmarked chapter opens where it was

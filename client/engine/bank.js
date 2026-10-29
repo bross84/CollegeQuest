@@ -70,19 +70,19 @@ function practiceTab(ch) {
       <div class="answer"><select class="line sm" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n === list.length && n < 5 ? 'All ' : ''}${n} questions</option>`).join('')}</select>
         <select class="line sm" id="ext" aria-label="Time">${[15, 30, 45, 60].map((m) => `<option value="${m}" ${m === 30 ? 'selected' : ''}>${m} minutes</option>`).join('')}</select>
         <button class="btn alt" data-act="b-exam" data-ch="${ch.id}">Start practice exam</button></div></div>` : '';
-  return `${recall}
-  <section class="zone"><h3>Problems${list.length ? ` &middot; ${originals.length} from your materials${made ? `, ${made} AI-made` : ''}` : ''}</h3>
+  return `${studyZoneHTML(ch)}${recall}
+  <details class="bankbox" ${BK.open ? 'open' : ''}><summary>Problem bank <small>${plural(list.length, 'problem')}</small></summary><section class="zone"><h3>Problems${list.length ? ` &middot; ${originals.length} from your materials${made ? `, ${made} AI-made` : ''}` : ''}</h3>
     <div class="row2">
       ${bankable.length ? `<button class="btn ${list.length ? 'alt' : ''}" data-act="b-build" ${off}>Build problem bank</button>` : ''}
       ${bankable.length && smp ? `<button class="btn alt" data-act="b-gen" ${off}>Write new problems from my materials</button>` : ''}
       ${originals.length && smp ? `<button class="btn alt" data-act="b-similar-all" ${off}>Make similar problems</button>` : ''}
       ${BK.busy ? '<button class="link" data-act="b-stop">Stop</button>' : ''}</div>
-    ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
     ${list.length ? `<div class="mine plist">${list.map(row).join('')}</div>${made ? '<small>AI-made problems come with an answer the AI worked out, which can be wrong. The checker treats it as a hint, not a verdict.</small>' : ''}${exam}`
       : `<div class="empty"><p>No problems yet.</p>${bankable.length ? '<small>“Build problem bank” copies the problems out of your uploads and writes new ones when there are none. “Write new problems from my materials” makes fresh ones from your notes and reading.</small>'
         : `<small>Upload this chapter’s notes, reading, or a past exam on the <a href="${chHash(ch.id, 'materials')}">Materials tab</a>. Practice is built from what you upload.</small>`}</div>`}
-  </section>`;
+  </section></details>`;
 }
+app.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('bankbox')) BK.open = e.target.open; }, true);
 
 // ---- building ----
 // where: a chapter id when started from a chapter's Practice tab, else null (the class-level Practice exams page).
@@ -105,40 +105,58 @@ async function bankBuild(docs, where) {
   if (!smp) { BK.err = 'Building a problem bank needs the AI, which isn’t set up on this server.'; return bankHome(where); }
   if (docs.some((d) => d.kind === 'image') && !(smpLimits && smpLimits.images)) { BK.err = 'Reading photos needs a vision model. Upload a PDF or text version instead.'; return bankHome(where); }
   bankBegin(where);
-  if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
-  const seen = new Set(allProblems().map((p) => normText(p.text)));
-  let added = 0, cut = false;
+  let tally = { added: 0, cut: false };
   try {
-    for (const d of docs) {
-      const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
-      const parts = await docParts([d]);
-      cut = cut || parts.length > MAX_PARTS;
-      const found = [];
-      let topic = '';
-      for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && found.length < 60; i++) {
-        BK.note = `Reading ${d.name}${parts.length > 1 ? ` (part ${i + 1} of ${Math.min(parts.length, MAX_PARTS)})` : ''}…`; paintBank();
-        const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
-        const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
-        topic = topic || String((r && r.topic) || '').slice(0, 80);
-        (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
-          const text = String((p && p.text) || '').trim(), k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
-          if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: String((p && p.answer) || '').trim().slice(0, 500), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
-        });
-      }
-      if (found.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: found.slice(0, 60) }); added += Math.min(found.length, 60); }
-    }
+    tally = await readDocs(docs, tally);
     await loadProblems();
     if (where && !(PROBS[where] || []).length && !BK.ctl.signal.aborted) return bankGenerate(where, true);
-    bankEnd(added ? `Added ${plural(added, 'problem')} to the bank.${cut ? ' That was a lot of material, so only the first parts were read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
-  } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Added ${plural(added, 'problem')} before it stopped.` : '', e); }
+    bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} to the bank.${tally.cut ? ' That was a lot of material, so some of it was not read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} before it stopped.` : '', e); }
+}
+
+// The reading itself: every part of each document goes to the AI, and what it finds is saved to the bank. tally.added and
+// tally.cut are updated as it goes, so a failure part-way still reports what was saved.
+const PER_DOC = 150;
+async function readDocs(docs, tally) {
+  if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
+  const seen = new Set(allProblems().map((p) => normText(p.text)));
+  for (const d of docs) {
+    const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
+    const parts = await docParts([d]);
+    if (parts.length > MAX_PARTS) tally.cut = true;
+    const found = [];
+    let topic = '';
+    for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && found.length < PER_DOC; i++) {
+      BK.note = `Reading ${d.name}${parts.length > 1 ? ` (part ${i + 1} of ${Math.min(parts.length, MAX_PARTS)})` : ''}…`; paintBank();
+      const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
+      const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
+      topic = topic || String((r && r.topic) || '').slice(0, 80);
+      (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
+        const text = String((p && p.text) || '').trim(), k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
+        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: String((p && p.answer) || '').trim().slice(0, 500), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
+      });
+    }
+    for (let i = 0; i < Math.min(found.length, PER_DOC); i += 100) {
+      const chunk = found.slice(i, Math.min(found.length, PER_DOC)).slice(0, 100);
+      await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: chunk }); tally.added += chunk.length;
+    }
+  }
+  return tally;
 }
 
 // Write practice problems straight from the chapter's materials, for when they hold no problems to copy (notes, slides,
 // a textbook chapter). Any problems already in the bank set the style. Saved as AI-made.
 async function bankGenerate(chId, cont) {
   if (!cont) { if (BK.busy || !smp) return; bankBegin(chId); }
-  let added = 0;
+  const tally = { added: 0 };
   try {
+    await genCore(chId, tally);
+    await loadProblems();
+    bankEnd(tally.added ? `Wrote ${plural(tally.added, 'problem')} from your materials.` : 'The AI didn’t write anything usable. Try again.');
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd(tally.added ? `Wrote ${plural(tally.added, 'problem')} before it stopped.` : '', e); }
+}
+async function genCore(chId, tally) {
+  {
     if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
     const docs = DOCS.filter((d) => d.chapterId === chId && d.chars && d.kind !== 'image');
     if (!docs.length) throw Object.assign(new Error('There is no readable text in this chapter yet. Upload a PDF, Word file or notes.'), { code: 'none' });
@@ -165,11 +183,9 @@ ${parts[i].text}`;
         kind: 'similar', text: String((q && q.text) || '').trim(), answer: String((q && q.answer) || '').trim(),
         steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic, sourceDoc: '', chapterId: chId,
       })).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
-      if (made.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: made }); added += made.length; }
+      if (made.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: made }); tally.added += made.length; }
     }
-    await loadProblems();
-    bankEnd(added ? `Wrote ${plural(added, 'problem')} from your materials.` : 'The AI didn’t write anything usable. Try again.');
-  } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Wrote ${plural(added, 'problem')} before it stopped.` : '', e); }
+  }
 }
 
 // n new problems like each original: same type and difficulty, different numbers or wording.
@@ -199,6 +215,7 @@ async function bankSimilar(origs, n, chId) {
 }
 
 async function bankAct(act, t) {
+  if (/^b-(set|xbuild)/.test(act)) return setAct(act, t);
   const id = t.dataset && t.dataset.id, chId = (ROUTE && ROUTE.realId) || t.dataset.ch;
   if (act !== 'b-del') BK.delId = null;
   if (act === 'b-open') return openProblem(id, 'bank', t.dataset.ch);
@@ -240,7 +257,9 @@ function exStart(chId, docId) {
   const { list, label, ordered } = examPool(chId, docId);
   const n = ordered ? list.length : Math.min(+(document.getElementById('exn') || {}).value || 10, list.length), min = +(document.getElementById('ext') || {}).value || (ordered ? 60 : 30);
   if (n < 1) return;
-  const items = ordered ? list : shuffle(list).slice(0, n);
+  exRun(label, ordered ? list : shuffle(list).slice(0, n), min, chId);
+}
+function exRun(label, items, min, chId) {
   round = null; Q = null; W.id = null; closeRef();
   EX = { chId: chId || null, label, items, answers: items.map(() => ''), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
   renderExam();
@@ -276,10 +295,10 @@ function renderExam() {
   ${EX.items.map((p, i) => {
     const r = EX.results[i], mine = EX.answers[i].trim();
     const verdict = r === true ? '<div class="fb good"><p><b>Matches the key.</b></p></div>'
-      : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' ? ' (written by the AI, so double-check it)' : ''}</p></div>`
-      : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' ? ' (written by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
+      : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</p></div>`
+      : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
       : '<div class="fb"><p>No answer key for this one.</p></div>';
-    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
+    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.src ? ' &middot; ' + SRC_LABEL[p.src] : p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
       <div class="where">${mine ? esc(mine) : '(left blank)'}</div>${verdict}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
       <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${PACK.videoWord}`.trim() || CLASS.name, true)}</div></div>`;
@@ -297,7 +316,7 @@ function examsHTML() {
   const count = (id) => (PROBS[id] || []).length;
   const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
   const srcRow = (d) => {
-    const n = allProblems().filter((p) => p.sourceDoc === d.id).length;
+    const n = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original').length;
     return `<div class="docrow"><div class="dtop"><span class="dk">${KIND_LABEL[d.kind]}</span>${d.tag ? `<span class="dk tag-${d.tag}">${TAG_LABEL[d.tag]}</span>` : ''}<a class="dn" href="/api/docs/${d.id}/file" target="_blank" rel="noopener">${esc(d.name)}</a>
         <small>${n ? plural(n, 'problem') + ' read' : 'not read yet'}</small></div>
       <div class="dact">${n ? `<button class="btn alt sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${n ? 'Read again' : 'Read its problems'}</button>` : ''}</div></div>`;
@@ -311,11 +330,8 @@ function examsHTML() {
   ${upMsgHTML()}
   ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p><div class="acts"><button class="link" data-act="b-stop">Stop</button></div></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
   <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}</section>
-  <section class="zone"><h3>Mixed exam</h3>
-    ${total < 3 ? '<small>Read the problems out of an exam or chapter materials first. There are only ' + total + ' in the bank.</small>' : `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>
-      <label class="chk"><input type="checkbox" data-act="b-xorig" ${XS.orig ? 'checked' : ''}> Only questions from my materials (no AI-made)</label>
-      ${list.length >= 3 ? `<div class="answer"><select class="line sm" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select>
-        <button class="btn" data-act="b-exmix">Start practice exam</button></div>` : '<small>Tick chapters with at least 3 problems between them.</small>'}`}</section>
+  ${examBuilderHTML(list)}
+  ${savedExamsHTML()}
   ${loose.length && CHAPTERS.length ? `<section class="zone"><h3>Not filed under a chapter</h3><small>${plural(loose.length, 'problem')} the AI couldn’t place. Pick a chapter for each.</small>
     <div class="mine plist">${loose.map((p) => `<div class="prow"><button class="mine-item" data-act="b-open" data-id="${p.id}"><span class="mtext">${fmtMath(p.text)}</span></button>
       <select class="line sm" data-pmove="${p.id}" aria-label="Chapter"><option value="">Choose a chapter</option>${CHAPTERS.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div>`).join('')}</div></section>` : ''}`;

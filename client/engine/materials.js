@@ -4,7 +4,7 @@
 let U = { docs: new Set(), text: '', found: null, topic: '', busy: false, err: '', note: '', ctl: null };
 const resetU = () => { U = { docs: new Set(), text: '', found: null, topic: '', busy: false, err: '', note: '', ctl: null }; };
 const NUMBERED = /^\(?\d+[.)]\s+/;
-const CHUNK = 12000, MAX_PARTS = 10;
+const CHUNK = 12000, MAX_PARTS = 24;
 
 // No-AI fallback: split pasted text on "1." / "2)" numbering, else one problem per line.
 function splitLocal(text) {

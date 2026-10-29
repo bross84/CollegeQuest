@@ -91,6 +91,22 @@ function openDb(dataDir) {
     // Cached YouTube searches: each live search costs 100 of the 10,000 daily quota units.
     db.exec('CREATE TABLE video_cache (q TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL); PRAGMA user_version = 5;');
   }
+  if (v < 6) {
+    // Saved study sets and exams: a title and an ordered list of bank problems ({ id, src, key }), so a set can be retaken or printed.
+    db.exec(`
+      CREATE TABLE studysets (
+        id TEXT PRIMARY KEY,
+        class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL DEFAULT 'chapter',
+        title TEXT NOT NULL,
+        chapter_ids TEXT NOT NULL DEFAULT '[]',
+        items TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX studysets_class ON studysets(class_id);
+      PRAGMA user_version = 6;
+    `);
+  }
   return db;
 }
 
