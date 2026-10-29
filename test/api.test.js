@@ -292,6 +292,22 @@ test('problems: a class bank files each problem under its own chapter, or none, 
   assert.strictEqual((await call('GET', `/api/chapters/${c2.id}/problems`)).data.length, 2);
   assert.strictEqual((await call('PATCH', `/api/problems/${made[2].id}`, { chapterId: foreign.id })).data.chapterId, null);
   assert.strictEqual((await call('GET', '/api/classes/nope/problems')).res.status, 404);
+  // clearing: one chapter, the unfiled ones, then everything; other classes are untouched
+  await call('POST', `/api/classes/${other.id}/problems`, { problems: [{ text: 'Keep me' }] });
+  assert.strictEqual((await call('DELETE', `/api/classes/${cls.id}/problems?chapter=${c1.id}`)).data.removed, 1);
+  assert.strictEqual((await call('DELETE', `/api/classes/${cls.id}/problems?chapter=none`)).data.removed, 2); // Q3 and Q4
+  assert.strictEqual((await call('DELETE', `/api/classes/${cls.id}/problems`)).data.removed, 1);
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/problems`)).data.length, 0);
+  assert.strictEqual((await call('GET', `/api/classes/${other.id}/problems`)).data.length, 1);
+});
+
+test('problems: deleting a document removes the problems read from it', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Doc problems', pack: 'general' })).data;
+  const doc = (await call('POST', `/api/classes/${cls.id}/notes`, { name: 'Exam', text: 'Q1. Solve 2x = 6' })).data;
+  await call('POST', `/api/classes/${cls.id}/problems`, { problems: [{ text: 'From doc', sourceDoc: doc.id }, { text: 'Other doc', sourceDoc: 'elsewhere' }] });
+  assert.strictEqual((await call('DELETE', `/api/docs/${doc.id}`)).res.status, 200);
+  const left = (await call('GET', `/api/classes/${cls.id}/problems`)).data;
+  assert.deepStrictEqual(left.map((p) => p.text), ['Other doc']);
 });
 
 test('study sets: saved as a list of this class problems, retaken or deleted later', async () => {

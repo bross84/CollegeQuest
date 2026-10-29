@@ -262,6 +262,7 @@ function createApp(cfg) {
   api.delete('/docs/:id', (req, res) => {
     const d = getDoc(req, res); if (!d) return;
     db.prepare('DELETE FROM documents WHERE id = ?').run(d.id);
+    db.prepare('DELETE FROM problems WHERE source_doc = ?').run(d.id); // what was read from it goes with it
     fs.rmSync(path.join(uploads, d.file), { force: true });
     res.json({ ok: true });
   });
@@ -398,6 +399,14 @@ function createApp(cfg) {
     if (!p) return res.status(404).json({ error: 'No such problem.' });
     if (req.body && req.body.chapterId !== undefined) db.prepare('UPDATE problems SET chapter_id = ? WHERE id = ?').run(chapterOf(p.class_id, req.body.chapterId), p.id);
     res.json(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(p.id)));
+  });
+  api.delete('/classes/:id/problems', (req, res) => { // ?chapter=<id> clears one chapter, ?chapter=none the unfiled ones, no query clears them all
+    if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
+    const ch = req.query.chapter;
+    const r = ch === undefined ? db.prepare('DELETE FROM problems WHERE class_id = ?').run(req.params.id)
+      : ch === 'none' ? db.prepare('DELETE FROM problems WHERE class_id = ? AND chapter_id IS NULL').run(req.params.id)
+        : db.prepare('DELETE FROM problems WHERE class_id = ? AND chapter_id = ?').run(req.params.id, String(ch));
+    res.json({ ok: true, removed: Number(r.changes) });
   });
   api.delete('/problems/:id', (req, res) => {
     const r = db.prepare('DELETE FROM problems WHERE id = ?').run(req.params.id);

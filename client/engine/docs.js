@@ -129,7 +129,7 @@ async function docAct(act, t) {
     refreshDocs();
   } else if (act === 'd-del') {
     if (DU.delId !== id) { DU.delId = id; return refreshDocs(); }
-    try { await api('DELETE', `/api/docs/${id}`); DOCS = DOCS.filter((x) => x.id !== id); U.docs.delete(id); DSEL.delete(id); await loadChapters(); } catch (e) { DU.err = e.message; }
+    try { await api('DELETE', `/api/docs/${id}`); DOCS = DOCS.filter((x) => x.id !== id); U.docs.delete(id); DSEL.delete(id); PLOADED = false; PROBS = {}; await loadChapters(); loadProblems().then(() => refreshDocs()); } catch (e) { DU.err = e.message; }
     DU.delId = null; refreshDocs();
   }
 }

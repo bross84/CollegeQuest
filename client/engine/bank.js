@@ -76,7 +76,8 @@ function practiceTab(ch) {
       ${bankable.length ? `<button class="btn ${list.length ? 'alt' : ''}" data-act="b-build" ${off}>Build problem bank</button>` : ''}
       ${bankable.length && smp ? `<button class="btn alt" data-act="b-gen" ${off}>Write new problems from my materials</button>` : ''}
       ${originals.length && smp ? `<button class="btn alt" data-act="b-similar-all" ${off}>Make similar problems</button>` : ''}
-      ${BK.busy ? '<button class="link" data-act="b-stop">Stop</button>' : ''}</div>
+      ${BK.busy ? '<button class="link" data-act="b-stop">Stop</button>' : ''}
+      ${list.length ? clearBtn(ch.id, `Clear this chapter’s ${plural(list.length, 'problem')}`) : ''}</div>
     ${list.length ? `<div class="mine plist">${list.map(row).join('')}</div>${made ? '<small>AI-made problems come with an answer the AI worked out, which can be wrong. The checker treats it as a hint, not a verdict.</small>' : ''}${exam}`
       : `<div class="empty"><p>No problems yet.</p>${bankable.length ? '<small>“Build problem bank” copies the problems out of your uploads and writes new ones when there are none. “Write new problems from my materials” makes fresh ones from your notes and reading.</small>'
         : `<small>Upload this chapter’s notes, reading, or a past exam on the <a href="${chHash(ch.id, 'materials')}">Materials tab</a>. Practice is built from what you upload.</small>`}</div>`}
@@ -214,10 +215,24 @@ async function bankSimilar(origs, n, chId) {
   } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Added ${plural(added, 'AI-made problem')} before it stopped.` : '', e); }
 }
 
+// Two-click button that deletes problems: which = a chapter id, 'none' (unfiled) or 'all'.
+const clearBtn = (which, label) => `<button class="link" data-act="b-clear" data-which="${which}">${BK.clearArmed === which ? 'Really delete them? Click again' : label}</button>`;
+
 async function bankAct(act, t) {
   if (/^b-(set|xbuild)/.test(act)) return setAct(act, t);
   const id = t.dataset && t.dataset.id, chId = (ROUTE && ROUTE.realId) || t.dataset.ch;
   if (act !== 'b-del') BK.delId = null;
+  if (act !== 'b-clear') BK.clearArmed = null;
+  if (act === 'b-clear') {
+    const which = t.dataset.which;
+    if (BK.clearArmed !== which) { BK.clearArmed = which; return renderRoute(true); }
+    BK.clearArmed = null;
+    try {
+      await api('DELETE', `/api/classes/${CLASS.id}/problems${which === 'all' ? '' : '?chapter=' + encodeURIComponent(which)}`);
+      PLOADED = false; PROBS = {}; await loadProblems(); BK.msg = 'Cleared.';
+    } catch (e) { BK.err = e.message; }
+    return renderRoute(true);
+  }
   if (act === 'b-open') return openProblem(id, 'bank', t.dataset.ch);
   if (act === 'b-build') {
     const docs = id ? DOCS.filter((d) => d.id === id) : DOCS.filter((d) => d.chapterId === chId && d.chars);
@@ -332,9 +347,10 @@ function examsHTML() {
   <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}</section>
   ${examBuilderHTML(list)}
   ${savedExamsHTML()}
-  ${loose.length && CHAPTERS.length ? `<section class="zone"><h3>Not filed under a chapter</h3><small>${plural(loose.length, 'problem')} the AI couldn’t place. Pick a chapter for each.</small>
+  ${allProblems().length ? `<div class="skiprow">${clearBtn('all', `Clear all ${plural(allProblems().length, 'problem')} read from my materials`)}</div>` : ''}
+  ${loose.length && CHAPTERS.length ? `<details class="bankbox"><summary>Not filed under a chapter <small>${plural(loose.length, 'problem')}</small></summary><section class="zone"><small>The AI couldn’t place these. Pick a chapter for each, or ${clearBtn('none', 'clear them')}.</small>
     <div class="mine plist">${loose.map((p) => `<div class="prow"><button class="mine-item" data-act="b-open" data-id="${p.id}"><span class="mtext">${fmtMath(p.text)}</span></button>
-      <select class="line sm" data-pmove="${p.id}" aria-label="Chapter"><option value="">Choose a chapter</option>${CHAPTERS.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div>`).join('')}</div></section>` : ''}`;
+      <select class="line sm" data-pmove="${p.id}" aria-label="Chapter"><option value="">Choose a chapter</option>${CHAPTERS.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div>`).join('')}</div></section></details>` : ''}`;
 }
 app.addEventListener('change', async (e) => {
   const t = e.target;
