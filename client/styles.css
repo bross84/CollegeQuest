@@ -176,7 +176,7 @@ sub, sup { line-height: 0; }
 .ovtabs { display: flex; gap: 14px; flex-wrap: wrap; }
 .ovtabs .link.on { color: var(--ink); text-decoration-thickness: 3px; }
 .ptwrap { overflow-x: auto; padding-bottom: 6px; }
-.ptg { display: grid; grid-template-columns: repeat(18, 44px); grid-template-rows: auto repeat(7, 50px) 12px 50px 50px; gap: 2px; width: max-content; }
+.ptg { display: grid; grid-template-columns: repeat(18, minmax(0, 1fr)); grid-template-rows: auto repeat(7, 50px) 12px 50px 50px; gap: 2px; width: 100%; min-width: 640px; } /* fills the card; only a phone-width screen scrolls sideways */
 .pth { grid-row: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; font-size: .6rem; color: var(--muted); line-height: 1.15; padding-bottom: 2px; }
 .pth b { color: var(--ink); font-size: .72rem; }
 .ptc { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 4px; line-height: 1.05; background: var(--card); }
