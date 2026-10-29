@@ -323,7 +323,9 @@ select.line.sm { padding: 6px 10px; font-size: .9rem; }
 .docs { display: flex; flex-direction: column; }
 .paste { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 0 14px; }
 .paste summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
-.paste[open] { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.paste[open] { padding-bottom: 14px; }
+.paste[open] > :not(summary) { margin-block: 0 10px; } /* a flex gap on <details> isn't honoured everywhere */
+.paste[open] > :last-child { margin-bottom: 0; }
 .bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
 .docrow .dact select.line { width: auto; }
 .dk.tag-exam, .dk.tag-textbook { color: var(--accent); border-color: var(--accent); }
