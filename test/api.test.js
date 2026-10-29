@@ -292,6 +292,12 @@ test('problems: a class bank files each problem under its own chapter, or none, 
   assert.strictEqual((await call('GET', `/api/chapters/${c2.id}/problems`)).data.length, 2);
   assert.strictEqual((await call('PATCH', `/api/problems/${made[2].id}`, { chapterId: foreign.id })).data.chapterId, null);
   assert.strictEqual((await call('GET', '/api/classes/nope/problems')).res.status, 404);
+  // links to related book problems: unset until matched, limited to this class's problems
+  assert.strictEqual(made[0].links, null);
+  const lk = (await call('PATCH', `/api/problems/${made[0].id}`, { chapterId: c1.id, links: [made[1].id, 'nope', made[0].id] })).data;
+  assert.deepStrictEqual(lk.links, [made[1].id]);
+  assert.strictEqual(lk.chapterId, c1.id);
+  assert.deepStrictEqual((await call('PATCH', `/api/problems/${made[0].id}`, { links: [] })).data.links, []);
   // clearing: one chapter, the unfiled ones, then everything; other classes are untouched
   await call('POST', `/api/classes/${other.id}/problems`, { problems: [{ text: 'Keep me' }] });
   assert.strictEqual((await call('DELETE', `/api/classes/${cls.id}/problems?chapter=${c1.id}`)).data.removed, 1);
@@ -384,6 +390,6 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 7);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 8);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });

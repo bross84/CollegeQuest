@@ -7,8 +7,8 @@ const SRC_LABEL = { exam: 'Instructor’s exam', book: 'From the text', ai: 'AI-
 const SET_SIZES = [10, 15, 20, 25, 30, 40];
 // share of an exam, by source; the AI-written share is new problems modelled on the picked ones
 const SMIX = {
-  like: { label: 'Like the instructor’s exam: mostly its questions, plus similar ones', exam: 40, book: 40, ai: 20 },
-  exam: { label: 'Mostly the instructor’s questions', exam: 60, book: 30, ai: 10 },
+  like: { label: 'Like the instructor’s exam', exam: 40, book: 40, ai: 20 },
+  exam: { label: 'Mostly instructor’s questions', exam: 60, book: 30, ai: 10 },
   book: { label: 'More from the text', exam: 20, book: 60, ai: 20 },
   fresh: { label: 'Mostly new problems', exam: 20, book: 30, ai: 50 },
 };
@@ -28,6 +28,61 @@ const breakdown = (items) => ['exam', 'book', 'ai'].map((k) => [k, items.filter(
   .map(([k, n]) => `${n} ${{ exam: 'from the instructor’s exam', book: 'from the text', ai: 'AI-written' }[k]}`).join(', ');
 const minutesFor = (n) => Math.max(15, Math.round((n * 3) / 5) * 5);
 
+// ---- matching exam questions to the text ----
+// For each instructor question, find the textbook problems that test the same idea. A cheap word-overlap pass shortlists a few
+// candidates per question, then the AI picks the ones that really match. The matches are saved on the question (links), and a
+// question with no chapter is filed under the chapter its matches belong to.
+const STOPW = new Set('the and for with from that this these those are was were what which find how many much does has have into given calculate determine following using use each than then when will would can your you its per'.split(' '));
+const wordsOf = (t) => new Set((String(t).toLowerCase().match(/[a-z][a-z0-9+\-]{2,}/g) || []).filter((w) => !STOPW.has(w)));
+function shortlist(qs, books, k) {
+  const sets = books.map((b) => wordsOf(b.text)), df = new Map();
+  sets.forEach((s) => s.forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
+  const idf = (w) => Math.log(1 + books.length / (1 + (df.get(w) || 0)));
+  const len = (s) => Math.sqrt([...s].reduce((a, w) => a + idf(w) ** 2, 0)) || 1, bl = sets.map(len);
+  return qs.map((q) => {
+    const qw = wordsOf(q.text), ql = len(qw);
+    return sets.map((s, i) => { let d = 0; qw.forEach((w) => { if (s.has(w)) d += idf(w) ** 2; }); return [d / (ql * bl[i]), i]; })
+      .filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, k).map((x) => books[x[1]]);
+  });
+}
+// redo: also try again on exam questions that found no match before (new textbook problems may have been read since).
+async function linkExam(redo) {
+  if (!smp) return 0;
+  const books = allProblems().filter((p) => p.kind === 'original' && srcOf(p) === 'book');
+  const exams = allProblems().filter((p) => p.kind === 'original' && srcOf(p) === 'exam' && (p.links == null || (redo && !p.links.length)));
+  if (!exams.length || !books.length) return 0;
+  const clip = (t, n) => t.replace(/\s+/g, ' ').slice(0, n);
+  let done = 0;
+  for (let i = 0; i < exams.length; i += 8) {
+    const batch = exams.slice(i, i + 8), short = shortlist(batch, books, 6), cands = [], idx = new Map();
+    short.forEach((list) => list.forEach((b) => { if (!idx.has(b.id)) { cands.push(b); idx.set(b.id, cands.length); } }));
+    BK.note = `Matching exam questions to the text… (${Math.min(i + 8, exams.length)} of ${exams.length})`; paintBank();
+    let r = null;
+    if (cands.length) {
+      r = await aiJson(`${rules()}\n\nA student is studying for exams in "${CLASS.name}". Below are questions from the instructor’s practice exam, then numbered problems from the textbook. `
+        + 'For each question, name the textbook problems (only from its "possible matches") that test the same skill or idea, best first, at most 2. Use an empty list when none really does.\n\n'
+        + 'Reply with only this JSON:\n{"links":[{"q":1,"match":[3]}]}\n\nExam questions:\n'
+        + batch.map((q, j) => `Q${j + 1}: ${clip(q.text, 300)}\n  possible matches: ${short[j].map((b) => idx.get(b.id)).join(', ') || 'none'}`).join('\n')
+        + '\n\nTextbook problems:\n' + cands.map((b, j) => `${j + 1}. ${clip(b.text, 220)}`).join('\n'), BK.ctl, bankWait(), 1500);
+    }
+    const got = Array.isArray(r && r.links) ? r.links : [];
+    for (let j = 0; j < batch.length; j++) {
+      const q = batch[j], m = (got.find((l) => +(l && l.q) === j + 1) || {}).match;
+      const ids = (Array.isArray(m) ? m : []).map((x) => cands[(+x || 0) - 1]).filter((b) => b && short[j].includes(b)).slice(0, 2);
+      const body = { links: ids.map((b) => b.id) };
+      if (!q.chapterId) { // file it under the chapter most of its matches belong to
+        const tally = {};
+        ids.forEach((b) => { if (b.chapterId) tally[b.chapterId] = (tally[b.chapterId] || 0) + 1; });
+        const best = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
+        if (best) body.chapterId = best;
+      }
+      await api('PATCH', `/api/problems/${q.id}`, body); done++;
+    }
+  }
+  await loadProblems();
+  return done;
+}
+
 // ---- building ----
 // o: { kind: 'chapter'|'exam', chapterIds, title, size, mix, tplId, where }
 async function buildSet(o) {
@@ -41,6 +96,7 @@ async function buildSet(o) {
     const unread = DOCS.filter((d) => canRead(d) && !READ_TRIED.has(d.id) && !allProblems().some((p) => p.sourceDoc === d.id)
       && (o.chapterIds.includes(d.chapterId) || d.id === o.tplId || d.tag === 'exam' || (d.tag === 'textbook' && !d.chapterId)));
     if (unread.length) { unread.forEach((d) => READ_TRIED.add(d.id)); await readDocs(unread, tally); await loadProblems(); }
+    await linkExam(!!unread.length);
     const inScope = (p) => (p.chapterId && o.chapterIds.includes(p.chapterId)) || (o.tplId && p.sourceDoc === o.tplId);
     let pool = allProblems().filter(inScope);
     if (pool.length < 3 && o.kind === 'chapter' && o.chapterIds.length === 1) { // nothing to copy: write problems from the notes
@@ -52,7 +108,10 @@ async function buildSet(o) {
     const n = Math.max(3, Math.min(o.size, 60)), m = SMIX[o.mix] || SMIX.like;
     const nAI = Math.round((n * m.ai) / 100), nPick = Math.min(n - nAI, pool.length), nE = Math.round((nPick * m.exam) / (m.exam + m.book)), nB = nPick - nE;
     const rank = { exam: 0, book: 1, ai: 2 };
-    const cand = [...shuffle(pool)].sort((a, b) => rank[srcOf(a)] - rank[srcOf(b)]).slice(0, 120);
+    // textbook problems matched to an instructor question come before the rest of the textbook
+    const matched = new Set(pool.filter((p) => srcOf(p) === 'exam').flatMap((p) => p.links || []));
+    const order = (p) => rank[srcOf(p)] * 2 + (srcOf(p) === 'book' && !matched.has(p.id) ? 1 : 0);
+    const cand = [...shuffle(pool)].sort((a, b) => order(a) - order(b)).slice(0, 120);
     const multi = o.chapterIds.length > 1, letter = { exam: 'E', book: 'B', ai: 'A' };
     BK.note = 'Choosing the problems that cover the main ideas…'; paintBank();
     const lines = cand.map((p, i) => `${i + 1}. [${letter[srcOf(p)]}${multi && chapterById(p.chapterId) ? ', ' + chapterById(p.chapterId).title : ''}] ${p.text.replace(/\s+/g, ' ').slice(0, 240)}`).join('\n');
@@ -156,11 +215,12 @@ function examBuilderHTML(list) {
   return `<section class="zone"><h3>Build my exam</h3>
     <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one above to include its questions)'}, and is saved so you can retake or print it.</small>
     ${CHAPTERS.length ? `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>` : '<small>Add chapters first (use “+ Add chapter” in the sidebar) so the exam can cover them.</small>'}
-    <div class="answer"><select class="line sm" data-ss="tpl" aria-label="Model it on">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
-      <select class="line sm" data-ss="mix" aria-label="Mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select>
-      <select class="line sm" data-ss="xsize" aria-label="Size">${sizeOptions(SS.xsize)}</select></div>
-    <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button>
-      ${list.length >= 3 ? `<select class="line sm" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select><button class="btn alt" data-act="b-exmix">Quick random exam from the bank</button>` : ''}</div>
+    <div class="xrow"><label class="fld"><small>Model it on</small><select class="line" data-ss="tpl">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="fld"><small>Mix</small><select class="line" data-ss="mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
+      <label class="fld"><small>Size</small><select class="line" data-ss="xsize">${sizeOptions(SS.xsize)}</select></label></div>
+    <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button></div>
+    ${list.length >= 3 ? `<div class="quick"><small>Or a quick random exam from everything in the bank:</small>
+      <div class="answer"><select class="line" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select><button class="btn alt" data-act="b-exmix">Start random exam</button></div></div>` : ''}
     ${smp ? '' : '<small class="warn">Building needs the AI, which isn’t set up on this server.</small>'}</section>`;
 }
 function savedExamsHTML() {

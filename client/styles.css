@@ -491,3 +491,10 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .bankbox[open] { padding-bottom: 14px; }
 .bankbox[open] > :not(summary) { margin-top: 10px; }
 .xch { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+
+/* one size for every control in a row of choices */
+.answer select.line.sm, .row2 select.line.sm { min-height: 42px; padding: 8px 12px; font-size: 1rem; }
+.xrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 12px; margin-bottom: 12px; }
+.xrow .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.xrow select.line { width: 100%; min-height: 42px; padding: 8px 12px; font-size: 1rem; }
+.quick { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }

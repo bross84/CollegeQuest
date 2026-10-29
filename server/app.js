@@ -353,7 +353,7 @@ function createApp(cfg) {
   });
 
   // ---- problems: a chapter's problem bank (originals pulled from uploads, plus AI-made similar ones) ----
-  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, createdAt: r.created_at });
+  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), createdAt: r.created_at });
   api.get('/chapters/:id/problems', (req, res) => {
     const ch = needChapter(req, res); if (!ch) return;
     res.json(db.prepare('SELECT * FROM problems WHERE chapter_id = ? ORDER BY created_at, rowid').all(ch.id).map(problemOut));
@@ -401,6 +401,10 @@ function createApp(cfg) {
     const p = db.prepare('SELECT * FROM problems WHERE id = ?').get(req.params.id);
     if (!p) return res.status(404).json({ error: 'No such problem.' });
     if (req.body && req.body.chapterId !== undefined) db.prepare('UPDATE problems SET chapter_id = ? WHERE id = ?').run(chapterOf(p.class_id, req.body.chapterId), p.id);
+    if (req.body && Array.isArray(req.body.links)) {
+      const mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(p.class_id).map((r) => r.id));
+      db.prepare('UPDATE problems SET links = ? WHERE id = ?').run(JSON.stringify(req.body.links.filter((x) => mine.has(x) && x !== p.id).slice(0, 5)), p.id);
+    }
     res.json(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(p.id)));
   });
   api.delete('/classes/:id/problems', (req, res) => { // ?chapter=<id> clears one chapter, ?chapter=none the unfiled ones, no query clears them all

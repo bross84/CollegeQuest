@@ -110,6 +110,7 @@ async function bankBuild(docs, where) {
   try {
     tally = await readDocs(docs, tally);
     await loadProblems();
+    await linkExam(tally.added > 0);
     if (where && !(PROBS[where] || []).length && !BK.ctl.signal.aborted) return bankGenerate(where, true);
     bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} to the bank.${tally.cut ? ' That was a lot of material, so some of it was not read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
   } catch (e) { await loadProblems().catch(() => {}); bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} before it stopped.` : '', e); }
@@ -241,6 +242,12 @@ async function bankAct(act, t) {
   if (act === 'b-gen') return bankGenerate(chId);
   if (act === 'b-similar') { const p = (PROBS[chId] || []).find((x) => x.id === id); return p && bankSimilar([p], 3, chId); }
   if (act === 'b-similar-all') return bankSimilar((PROBS[chId] || []).filter((p) => p.kind === 'original').slice(0, 10), 2, chId);
+  if (act === 'b-link') {
+    if (BK.busy) return;
+    bankBegin(null);
+    try { const n = await linkExam(true); bankEnd(n ? `Matched ${plural(n, 'exam question')} to the text.` : 'Nothing new to match.'); } catch (e) { bankEnd('', e); }
+    return;
+  }
   if (act === 'b-stop') { if (BK.ctl) BK.ctl.abort(); return; }
   if (act === 'b-del') {
     if (BK.delId !== id) { BK.delId = id; return renderRoute(true); }
@@ -270,7 +277,7 @@ function examPool(chId, docId) {
 }
 function exStart(chId, docId) {
   const { list, label, ordered } = examPool(chId, docId);
-  const n = ordered ? list.length : Math.min(+(document.getElementById('exn') || {}).value || 10, list.length), min = +(document.getElementById('ext') || {}).value || (ordered ? 60 : 30);
+  const n = ordered ? list.length : Math.min(+(document.getElementById('exn') || {}).value || 10, list.length), min = +(document.getElementById('ext') || {}).value || (ordered ? 60 : minutesFor(n));
   if (n < 1) return;
   exRun(label, ordered ? list : shuffle(list).slice(0, n), min, chId);
 }
@@ -292,6 +299,11 @@ function exSubmit() {
   EX.results = EX.items.map((p, i) => localMatch(p.answer, EX.answers[i].trim()));
   renderExam();
 }
+// The textbook problems an instructor question was matched to, for extra practice on the same idea.
+const relatedHTML = (p) => {
+  const rel = (p.links || []).map((id) => allProblems().find((x) => x.id === id)).filter(Boolean);
+  return rel.length ? `<details class="paste"><summary>Practice the same idea from the text</summary>${rel.map((r) => `<p class="qtext">${fmtMath(r.text)}${chapterById(r.chapterId) ? ` <small>${esc(chapterById(r.chapterId).title)}</small>` : ''}</p>`).join('')}</details>` : '';
+};
 function renderExam() {
   if (!EX.done) {
     app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
@@ -315,6 +327,7 @@ function renderExam() {
       : '<div class="fb"><p>No answer key for this one.</p></div>';
     return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.src ? ' &middot; ' + SRC_LABEL[p.src] : p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
       <div class="where">${mine ? esc(mine) : '(left blank)'}</div>${verdict}
+      ${relatedHTML(p)}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
       <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${PACK.videoWord}`.trim() || CLASS.name, true)}</div></div>`;
   }).join('')}`;
@@ -337,14 +350,17 @@ function examsHTML() {
       <div class="dact">${n ? `<button class="btn alt sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${n ? 'Read again' : 'Read its problems'}</button>` : ''}</div></div>`;
   };
   const loose = PROBS.none || [];
+  const exQs = allProblems().filter((p) => p.kind === 'original' && srcOf(p) === 'exam'), matched = exQs.filter((p) => (p.links || []).length).length;
+  const hasBooks = allProblems().some((p) => p.kind === 'original' && srcOf(p) === 'book');
+  const matchLine = exQs.length ? `<small>${matched} of ${plural(exQs.length, 'exam question')} matched to textbook problems${hasBooks ? '' : ' (read a textbook chapter first)'}.</small>
+    ${hasBooks && smp && matched < exQs.length ? `<div class="answer"><button class="btn alt sm" data-act="b-link" ${off}>Match exam questions to the text</button></div>` : ''}` : '';
   const srcs = sourceDocs().filter((d) => d.tag === 'exam' || d.tag === 'textbook' || allProblems().some((p) => p.sourceDoc === d.id));
   return `${head}
   <p class="lead">Practice exams cover more than one chapter. Upload your instructor’s exams and review materials, let the AI read the questions and file each under its chapter, then build a timed exam from any chapters.</p>
-  <div class="answer"><label class="btn ${DU.busy ? 'alt' : ''}" for="xfile">${DU.busy ? 'Uploading…' : 'Upload a practice exam'}</label><input type="file" id="xfile" multiple accept="${DOC_ACCEPT}" hidden ${DU.busy ? 'disabled' : ''}>
-    <select class="line sm" id="ext" aria-label="Time limit">${[15, 30, 45, 60, 90, 120].map((m) => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${m} minutes</option>`).join('')}</select></div>
+  <div class="answer"><label class="btn ${DU.busy ? 'alt' : ''}" for="xfile">${DU.busy ? 'Uploading…' : 'Upload a practice exam'}</label><input type="file" id="xfile" multiple accept="${DOC_ACCEPT}" hidden ${DU.busy ? 'disabled' : ''}></div>
   ${upMsgHTML()}
   ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p><div class="acts"><button class="link" data-act="b-stop">Stop</button></div></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
-  <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}</section>
+  <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}${matchLine}</section>
   ${examBuilderHTML(list)}
   ${savedExamsHTML()}
   ${allProblems().length ? `<div class="skiprow">${clearBtn('all', `Clear all ${plural(allProblems().length, 'problem')} read from my materials`)}</div>` : ''}

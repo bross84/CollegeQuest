@@ -115,6 +115,13 @@ function openDb(dataDir) {
       PRAGMA user_version = 7;
     `);
   }
+  if (v < 8) {
+    // links: ids of the book problems an exam question is closest to; NULL means not matched yet, [] means nothing matched.
+    db.exec(`
+      ALTER TABLE problems ADD COLUMN links TEXT;
+      PRAGMA user_version = 8;
+    `);
+  }
   return db;
 }
 
