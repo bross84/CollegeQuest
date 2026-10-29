@@ -15,6 +15,7 @@ function loadConfig(env = process.env) {
     // 'true' trusts every X-Forwarded-For hop (spoofable). A number trusts that many proxies, which is what you want: 1 behind cloudflared.
     trustProxy: /^\d+$/.test(String(env.TRUST_PROXY || '').trim()) ? +env.TRUST_PROXY : String(env.TRUST_PROXY || '').toLowerCase() === 'true',
     maxUploadMb: num(env.MAX_UPLOAD_MB, 25),
+    youtube: { key: env.YOUTUBE_API_KEY || '', base: (env.YOUTUBE_BASE_URL || 'https://www.googleapis.com/youtube/v3').replace(/\/$/, '') },
     ai: {
       order,
       timeoutMs: num(env.AI_TIMEOUT_MS, 90000),

@@ -40,13 +40,25 @@ function renderSettings() {
     ${ST.err ? `<div class="fb no" role="status"><p>${esc(ST.err)}</p></div>` : ''}${ST.msg ? `<div class="fb good" role="status"><p>${esc(ST.msg)}</p></div>` : ''}
   </div>
   ${prov}
+  ${youtubeHTML(d, dis)}
   ${d.canEdit ? '<div class="answer" style="margin-top:20px"><button class="btn" data-act="s-save">Save settings</button></div>' : ''}`;
 }
 
+// Embedded videos need a YouTube Data API key. Without one, video links are plain YouTube searches.
+function youtubeHTML(d, dis) {
+  const y = d.youtube || { keySource: 'none', keyHint: '' };
+  const status = y.keySource === 'app' ? `Saved in the app (key ending ${esc(y.keyHint.slice(1))}).` : y.keySource === 'env' ? `Using the key from the server’s environment (ending ${esc(y.keyHint.slice(1))}).` : 'No key set. Videos show as a search link.';
+  return `<section class="zone form"><h3>YouTube videos</h3>
+    <small>${status} A key from the YouTube Data API v3 lets the app show videos in place. Each new search uses 100 of the 10,000 daily units, so results are kept for 30 days.</small>
+    <label class="field" for="st-yt-key">API key <small>(leave blank to keep the current one)</small></label>
+    <input class="line" id="st-yt-key" data-st="youtubeKey" type="password" autocomplete="off" spellcheck="false" placeholder="${y.keySource === 'none' ? 'paste a key' : '•••••••• unchanged'}" ${dis}>
+    ${y.keySource === 'app' && d.canEdit ? '<div class="answer"><button class="link" data-act="s-clear" data-id="youtube">Remove saved key</button></div>' : ''}</section>`;
+}
 // Collect the form into the PUT body. Keys are only sent when something was typed.
 function settingsBody() {
   const body = {}, order = document.getElementById('st-order');
   document.querySelectorAll('[data-st]').forEach((el) => {
+    if (el.dataset.st === 'youtubeKey') { if (el.value.trim()) body.youtubeKey = el.value; return; }
     const [n, f] = el.dataset.st.split('.');
     if (!f) return;
     if (f === 'key' && !el.value.trim()) return;
@@ -67,7 +79,7 @@ async function saveSettings(extra) {
 async function settingsAct(act, t) {
   if (act === 's-back') { await initAI(); return renderClasses(); }
   if (act === 's-save') { await saveSettings(); return renderSettings(); }
-  if (act === 's-clear') { await saveSettings({ [t.dataset.id]: { key: '' } }); return renderSettings(); }
+  if (act === 's-clear') { await saveSettings(t.dataset.id === 'youtube' ? { youtubeKey: '' } : { [t.dataset.id]: { key: '' } }); return renderSettings(); }
   if (act === 's-test') {
     const n = t.dataset.id;
     if (ST.data.canEdit && !(await saveSettings())) return renderSettings();

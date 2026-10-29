@@ -21,6 +21,7 @@ function createApp(cfg) {
     const r = db.prepare("SELECT value FROM settings WHERE key = 'ai'").get();
     try { return r ? JSON.parse(r.value) : {}; } catch (e) { return {}; }
   };
+  const youtubeKey = () => aiOverrides().youtubeKey || cfg.youtube.key;
   function effectiveAi() {
     const o = aiOverrides(), out = { ...cfg.ai, providers: {} };
     NAMES.forEach((n) => { const ov = o[n] || {}; out.providers[n] = { ...cfg.ai.providers[n], ...Object.fromEntries(['key', ...MODELS].filter((k) => ov[k]).map((k) => [k, ov[k]])) }; });
@@ -45,7 +46,7 @@ function createApp(cfg) {
   api.use(auth.middleware);
 
   // ---- AI ----
-  api.get('/ai/status', (req, res) => res.json(ai.status()));
+  api.get('/ai/status', (req, res) => res.json({ ...ai.status(), videos: !!youtubeKey() }));
 
   // ---- settings (keys are never sent back in full) ----
   function settingsView() {
@@ -53,6 +54,7 @@ function createApp(cfg) {
     return {
       canEdit: auth.required,
       order: eff.order,
+      youtube: { keySource: o.youtubeKey ? 'app' : cfg.youtube.key ? 'env' : 'none', keyHint: youtubeKey() ? '…' + youtubeKey().slice(-4) : '' },
       providers: Object.fromEntries(NAMES.map((n) => {
         const ov = o[n] || {}, base = cfg.ai.providers[n], key = eff.providers[n].key;
         return [n, {
@@ -75,6 +77,7 @@ function createApp(cfg) {
       MODELS.forEach((m) => { if (typeof inb[m] === 'string') ov[m] = inb[m].trim().slice(0, 120); });
       o[n] = ov;
     });
+    if (typeof b.youtubeKey === 'string') o.youtubeKey = b.youtubeKey.trim().slice(0, 300);
     if (Array.isArray(b.order) && b.order.length && b.order.every((n) => NAMES.includes(n))) o.order = [...new Set(b.order)];
     db.prepare("INSERT INTO settings (key, value) VALUES ('ai', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(o));
     return res.json(settingsView());
@@ -190,8 +193,11 @@ function createApp(cfg) {
   });
 
   // ---- documents ----
-  const DOC_COLS = 'id, class_id, name, kind, size, note, use_context, created_at, LENGTH(text) AS chars';
-  const docRow = (r) => ({ id: r.id, classId: r.class_id, name: r.name, kind: r.kind, size: r.size, chars: r.chars, note: r.note, useContext: !!r.use_context, createdAt: r.created_at });
+  const DOC_COLS = 'id, class_id, chapter_id, tag, name, kind, size, note, use_context, created_at, LENGTH(text) AS chars';
+  const TAGS = ['', 'exam', 'textbook', 'notes', 'slides'];
+  const docRow = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, tag: r.tag, name: r.name, kind: r.kind, size: r.size, chars: r.chars, note: r.note, useContext: !!r.use_context, createdAt: r.created_at });
+  // A chapter id from the client only counts when it belongs to this class; otherwise the row stays unsorted.
+  const chapterOf = (classId, id) => (id && db.prepare('SELECT id FROM chapters WHERE id = ? AND class_id = ?').get(String(id), classId) ? String(id) : null);
   const docById = (id) => docRow(db.prepare(`SELECT ${DOC_COLS} FROM documents WHERE id = ?`).get(id));
   const upload = multer({
     storage: multer.diskStorage({
@@ -214,8 +220,8 @@ function createApp(cfg) {
       const t = typeOf(f.originalname);
       const { text, note } = await extractText(t.kind, f.path);
       const id = path.basename(f.filename, path.extname(f.filename));
-      db.prepare('INSERT INTO documents (id, class_id, name, kind, mime, size, file, text, note, use_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(id, req.params.id, clip(fixName(f.originalname), 200), t.kind, t.mime, f.size, `${req.params.id}/${f.filename}`, text, note, t.kind === 'image' ? 0 : 1, Date.now());
+      db.prepare('INSERT INTO documents (id, class_id, chapter_id, tag, name, kind, mime, size, file, text, note, use_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, req.params.id, chapterOf(req.params.id, req.query.chapterId), TAGS.includes(req.query.tag) ? req.query.tag : '', clip(fixName(f.originalname), 200), t.kind, t.mime, f.size, `${req.params.id}/${f.filename}`, text, note, t.kind === 'image' ? 0 : 1, Date.now());
       made.push(docById(id));
     }
     if (!made.length) return res.status(400).json({ error: 'No supported files. Use photos, PDF, DOCX, TXT or MD.' });
@@ -228,8 +234,8 @@ function createApp(cfg) {
     const id = newId(), name = clip(req.body.name, 120) || 'Pasted notes';
     const dir = path.join(uploads, c.id); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, id + '.txt'), text);
-    db.prepare('INSERT INTO documents (id, class_id, name, kind, mime, size, file, text, note, use_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)')
-      .run(id, c.id, name, 'text', 'text/plain; charset=utf-8', Buffer.byteLength(text), `${c.id}/${id}.txt`, text, '', Date.now());
+    db.prepare('INSERT INTO documents (id, class_id, chapter_id, tag, name, kind, mime, size, file, text, note, use_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)')
+      .run(id, c.id, chapterOf(c.id, req.body.chapterId), TAGS.includes(req.body.tag) ? req.body.tag : 'notes', name, 'text', 'text/plain; charset=utf-8', Buffer.byteLength(text), `${c.id}/${id}.txt`, text, '', Date.now());
     res.status(201).json(docById(id));
   });
   const getDoc = (req, res) => { const d = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id); if (!d) res.status(404).json({ error: 'No such document.' }); return d; };
@@ -249,6 +255,8 @@ function createApp(cfg) {
     const b = req.body || {};
     if (b.name !== undefined && clip(b.name, 200)) db.prepare('UPDATE documents SET name = ? WHERE id = ?').run(clip(b.name, 200), d.id);
     if (b.useContext !== undefined) db.prepare('UPDATE documents SET use_context = ? WHERE id = ?').run(b.useContext ? 1 : 0, d.id);
+    if (b.chapterId !== undefined) db.prepare('UPDATE documents SET chapter_id = ? WHERE id = ?').run(chapterOf(d.class_id, b.chapterId), d.id);
+    if (TAGS.includes(b.tag)) db.prepare('UPDATE documents SET tag = ? WHERE id = ?').run(b.tag, d.id);
     res.json(docById(d.id));
   });
   api.delete('/docs/:id', (req, res) => {
@@ -258,7 +266,7 @@ function createApp(cfg) {
     res.json({ ok: true });
   });
   // Study guides: the client builds them (it reads the documents part by part and asks the AI), the server keeps them.
-  const guideOut = (g) => ({ id: g.id, title: g.title, docs: JSON.parse(g.docs), createdAt: g.created_at, ...JSON.parse(g.json) });
+  const guideOut = (g) => ({ id: g.id, chapterId: g.chapter_id, title: g.title, docs: JSON.parse(g.docs), createdAt: g.created_at, ...JSON.parse(g.json) });
   api.get('/classes/:id/guides', (req, res) => {
     const c = needClass(req, res); if (!c) return;
     res.json(db.prepare('SELECT * FROM guides WHERE class_id = ? ORDER BY created_at DESC').all(c.id).map(guideOut));
@@ -269,9 +277,17 @@ function createApp(cfg) {
     const sections = Array.isArray(b.sections) ? b.sections.slice(0, 200) : [], cards = Array.isArray(b.cards) ? b.cards.slice(0, 600) : [];
     if (!sections.length && !cards.length) return res.status(400).json({ error: 'The guide is empty.' });
     const id = newId(), docs = (Array.isArray(b.docs) ? b.docs : []).map((d) => clip(d, 40)).slice(0, 50);
-    db.prepare('INSERT INTO guides (id, class_id, title, docs, json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, c.id, clip(b.title, 120) || 'Study guide', JSON.stringify(docs), JSON.stringify({ sections, cards, note: clip(b.note, 300) }), Date.now());
+    db.prepare('INSERT INTO guides (id, class_id, chapter_id, title, docs, json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, c.id, chapterOf(c.id, b.chapterId), clip(b.title, 120) || 'Study guide', JSON.stringify(docs), JSON.stringify({ sections, cards, note: clip(b.note, 300) }), Date.now());
     res.status(201).json(guideOut(db.prepare('SELECT * FROM guides WHERE id = ?').get(id)));
+  });
+  api.patch('/guides/:id', json, (req, res) => {
+    const g = db.prepare('SELECT * FROM guides WHERE id = ?').get(req.params.id);
+    if (!g) return res.status(404).json({ error: 'No such guide.' });
+    const b = req.body || {};
+    if (b.chapterId !== undefined) db.prepare('UPDATE guides SET chapter_id = ? WHERE id = ?').run(chapterOf(g.class_id, b.chapterId), g.id);
+    if (b.title !== undefined && clip(b.title, 120)) db.prepare('UPDATE guides SET title = ? WHERE id = ?').run(clip(b.title, 120), g.id);
+    res.json(guideOut(db.prepare('SELECT * FROM guides WHERE id = ?').get(g.id)));
   });
   api.delete('/guides/:id', (req, res) => {
     const r = db.prepare('DELETE FROM guides WHERE id = ?').run(req.params.id);
@@ -280,8 +296,107 @@ function createApp(cfg) {
   });
   api.post('/classes/:id/search', json, (req, res) => {
     const c = needClass(req, res); if (!c) return;
-    const docs = db.prepare("SELECT name, text FROM documents WHERE class_id = ? AND use_context = 1 AND text != ''").all(c.id);
-    res.json(search(docs, clip(req.body && req.body.q, 2000), 3));
+    const docs = db.prepare("SELECT name, text, chapter_id FROM documents WHERE class_id = ? AND use_context = 1 AND text != ''").all(c.id);
+    const q = clip(req.body && req.body.q, 2000), ch = chapterOf(c.id, req.body && req.body.chapterId);
+    if (!ch) return res.json(search(docs, q, 3));
+    // the current chapter's documents win; other chapters only fill the remaining slots
+    const hits = search(docs.filter((d) => d.chapter_id === ch), q, 3);
+    if (hits.length < 3) search(docs.filter((d) => d.chapter_id !== ch), q, 3 - hits.length).forEach((h) => hits.push(h));
+    res.json(hits);
+  });
+
+  // ---- chapters: the notebook's table of contents ----
+  const chapterOut = (r) => ({
+    id: r.id, classId: r.class_id, title: r.title, position: r.position, createdAt: r.created_at,
+    counts: {
+      docs: db.prepare('SELECT COUNT(*) n FROM documents WHERE chapter_id = ?').get(r.id).n,
+      guides: db.prepare('SELECT COUNT(*) n FROM guides WHERE chapter_id = ?').get(r.id).n,
+      problems: db.prepare('SELECT COUNT(*) n FROM problems WHERE chapter_id = ?').get(r.id).n,
+    },
+  });
+  const chaptersOf = (classId) => db.prepare('SELECT * FROM chapters WHERE class_id = ? ORDER BY position, created_at').all(classId);
+  const needChapter = (req, res) => { const r = db.prepare('SELECT * FROM chapters WHERE id = ?').get(req.params.id); if (!r) res.status(404).json({ error: 'No such chapter.' }); return r; };
+  api.get('/classes/:id/chapters', (req, res) => {
+    const c = needClass(req, res); if (!c) return;
+    res.json(chaptersOf(c.id).map(chapterOut));
+  });
+  api.post('/classes/:id/chapters', json, (req, res) => {
+    const c = needClass(req, res); if (!c) return;
+    const title = clip(req.body && req.body.title, 120);
+    if (!title) return res.status(400).json({ error: 'Give the chapter a name.' });
+    const id = newId(), pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM chapters WHERE class_id = ?').get(c.id).p;
+    db.prepare('INSERT INTO chapters (id, class_id, title, position, created_at) VALUES (?, ?, ?, ?, ?)').run(id, c.id, title, pos, Date.now());
+    res.status(201).json(chapterOut(db.prepare('SELECT * FROM chapters WHERE id = ?').get(id)));
+  });
+  api.patch('/chapters/:id', json, (req, res) => {
+    const ch = needChapter(req, res); if (!ch) return;
+    const b = req.body || {};
+    if (b.title !== undefined) {
+      if (!clip(b.title, 120)) return res.status(400).json({ error: 'Give the chapter a name.' });
+      db.prepare('UPDATE chapters SET title = ? WHERE id = ?').run(clip(b.title, 120), ch.id);
+    }
+    if (Number.isInteger(b.position)) { // move to that slot among its siblings, then renumber
+      const ids = chaptersOf(ch.class_id).map((r) => r.id).filter((x) => x !== ch.id);
+      ids.splice(Math.min(Math.max(b.position, 0), ids.length), 0, ch.id);
+      ids.forEach((x, i) => db.prepare('UPDATE chapters SET position = ? WHERE id = ?').run(i, x));
+    }
+    res.json(chapterOut(db.prepare('SELECT * FROM chapters WHERE id = ?').get(ch.id)));
+  });
+  api.delete('/chapters/:id', (req, res) => { // its documents, guides and problems become Unsorted
+    const ch = needChapter(req, res); if (!ch) return;
+    db.prepare('DELETE FROM chapters WHERE id = ?').run(ch.id);
+    res.json({ ok: true });
+  });
+
+  // ---- problems: a chapter's problem bank (originals pulled from uploads, plus AI-made similar ones) ----
+  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, createdAt: r.created_at });
+  api.get('/chapters/:id/problems', (req, res) => {
+    const ch = needChapter(req, res); if (!ch) return;
+    res.json(db.prepare('SELECT * FROM problems WHERE chapter_id = ? ORDER BY created_at, rowid').all(ch.id).map(problemOut));
+  });
+  api.post('/chapters/:id/problems', express.json({ limit: '4mb' }), (req, res) => {
+    const ch = needChapter(req, res); if (!ch) return;
+    const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body]).slice(0, 100);
+    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const made = [];
+    for (const p of list) {
+      const text = clip(p && p.text, 4000);
+      if (!text) continue;
+      const id = newId();
+      ins.run(id, ch.class_id, ch.id, clip(p.sourceDoc, 40), p.kind === 'similar' ? 'similar' : 'original', text, clip(p.answer, 500),
+        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), Date.now());
+      made.push(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(id)));
+    }
+    if (!made.length) return res.status(400).json({ error: 'No problems to save.' });
+    res.status(201).json(made);
+  });
+  api.delete('/problems/:id', (req, res) => {
+    const r = db.prepare('DELETE FROM problems WHERE id = ?').run(req.params.id);
+    if (!r.changes) return res.status(404).json({ error: 'No such problem.' });
+    res.json({ ok: true });
+  });
+
+  // ---- videos: embeddable YouTube results for a topic, cached for 30 days ----
+  const VIDEO_TTL = 30 * 24 * 3600 * 1000;
+  api.get('/videos', async (req, res) => {
+    const q = clip(req.query.q, 200).toLowerCase();
+    if (!q) return res.status(400).json({ error: 'No search given.' });
+    const hit = db.prepare('SELECT json, fetched_at FROM video_cache WHERE q = ?').get(q);
+    if (hit && Date.now() - hit.fetched_at < VIDEO_TTL) return res.json({ videos: JSON.parse(hit.json), fallback: false });
+    const key = youtubeKey();
+    if (!key) return res.json({ videos: [], fallback: true });
+    try {
+      const url = `${cfg.youtube.base}/search?${new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', safeSearch: 'strict', maxResults: '3', q, key })}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return res.json({ videos: [], fallback: true }); // quota used up, bad key or outage: the client shows a plain search link
+      const data = await r.json();
+      const videos = (data.items || []).filter((i) => i && i.id && i.id.videoId).slice(0, 3).map((i) => ({
+        id: String(i.id.videoId), title: clip(i.snippet && i.snippet.title, 150), channel: clip(i.snippet && i.snippet.channelTitle, 80),
+        thumb: `https://i.ytimg.com/vi/${encodeURIComponent(i.id.videoId)}/mqdefault.jpg`,
+      }));
+      if (videos.length) db.prepare('INSERT INTO video_cache (q, json, fetched_at) VALUES (?, ?, ?) ON CONFLICT(q) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at').run(q, JSON.stringify(videos), Date.now());
+      return res.json({ videos, fallback: !videos.length });
+    } catch (e) { return res.json({ videos: [], fallback: true }); }
   });
 
   api.use((req, res) => res.status(404).json({ error: 'Not found.' }));

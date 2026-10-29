@@ -1,4 +1,4 @@
-// Rendering and interaction. Screens: home (map), round, summary.
+// Rendering and interaction for practice: the sets page, rounds and summaries. The notebook around them is in chapters.js.
 const app = document.getElementById('app');
 const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -17,9 +17,8 @@ function inlineRefHTML(key) {
 app.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('inlineref')) refOpen = e.target.open; }, true);
 app.addEventListener('mouseover', (e) => { if (PACK && PACK.refHover) PACK.refHover(e); });
 
-function renderHome() {
-  round = null;
-  if (!SKILLS.length) return renderHomeLite();
+// "Practice sets": the subject pack's generated drills (Chemistry, Algebra), with today's set and the skill map.
+function practiceSetsHTML() {
   const done = setDoneToday(), nx = nextUp();
   const zones = activeZones();
   const chZones = chapterZones(), baseZones = zones.filter((z) => !chZones.includes(z));
@@ -32,48 +31,29 @@ function renderHome() {
     const on = S.sections.includes(z);
     return `<section class="zone"><h3>${z}${toggle ? `<button class="link sec ${on ? 'on' : ''}" data-act="sec" data-i="${zones.indexOf(z)}" aria-pressed="${on}">${on ? 'Current section ✓' : 'Mark as current'}</button>` : ''}</h3><div class="tiles">${SKILLS.filter((s) => s.zone === z).map(tile).join('')}</div></section>`;
   };
-  app.innerHTML = `
-  <div class="top">${brandHTML()}</div>
-  ${standingHTML()}
+  return `<h1 class="ptitle">Practice sets</h1>
   ${examHTML()}
   <section class="practice">
     <h2>${done ? 'Practice set done for today' : 'Today’s practice'}</h2>
     <p>${done ? 'Another set is optional.' : `Five problems from ${S.sections.length ? 'the sections you marked as current' : `all of ${coreName()} (mark current sections below to narrow it)`}${baseZones.length ? ', with a couple of earlier-material problems mixed in' : ''}. You can stop at any point.`}</p>
     <div class="actions"><button class="btn" data-act="practice">${done ? 'Another set' : 'Start practice set'}</button><button class="link" data-act="one">One problem only</button></div>
   </section>
-  ${todayHTML()}
-  ${coachHTML()}
-  ${refHTML()}
-  ${guidesSection()}
-  ${mineSection()}
-  ${docsSection()}
   <h2 class="part">${esc(partTitle())}</h2>
   ${chZones.map((z) => zoneHTML(z, true)).join('')}
   ${baseZones.length ? `<h2 class="part">${esc(PACK.baseTitle || 'Earlier material')}</h2>` : ''}
-  ${baseZones.map((z) => zoneHTML(z, false)).join('')}
-  <div class="foot"><small><span id="syncnote">${syncNote()}</span> ${S.total} problems answered, ${S.right} right on the first try.</small>
-    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> ${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
-  window.scrollTo(0, 0);
+  ${baseZones.map((z) => zoneHTML(z, false)).join('')}`;
 }
 
-// Reference screens: the polyatomic ion table and atomic masses, like the periodic table you get on the exam.
-const refHTML = () => {
-  const btns = [...PACK.refs.map((r) => `<button class="btn alt sm" data-act="ref" data-k="${r.k}">${r.label}</button>`),
-    '<button class="btn alt sm" data-act="ref" data-k="ask">Ask a question</button>',
-    PACK.hasChoiceMode ? `<button class="btn alt sm" data-act="style" title="Tap to change">${STYLE_LABEL[S.style] || STYLE_LABEL.both}</button>` : ''];
-  return `<section class="zone"><h3>Reference</h3><div class="row2">${btns.join('')}</div></section>`;
-};
-const roundRefs = () => [...PACK.refs.map((r) => `<button class="link" data-act="ref" data-k="${r.k}">${r.label}</button>`), '<button class="link" data-act="ref" data-k="ask">Ask</button>'].join('');
+// The subject's reference screens (periodic table, ion list) live in the practice toolbar, not on the class pages.
+const roundRefs = () => [...PACK.refs.map((r) => `<button class="link" data-act="ref" data-k="${r.k}">${r.label}</button>`), '<button class="link" data-act="ref" data-k="ask">Ask the tutor</button>'].join('');
 const coreName = () => (CLASS.examLabel ? CLASS.examLabel + ' material' : PACK.coreName);
 const partTitle = () => (CLASS.examLabel ? CLASS.examLabel + (CLASS.examDate ? ' · ' + fmtDate(CLASS.examDate) : '') : PACK.coreTitle);
 const fmtDate = (d) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const brandHTML = () => `<div class="brandbox"><button class="link" data-act="c-classes">‹ Classes</button><div class="brand">${esc(CLASS.name)}</div></div>`;
-// Rank, progress and streak: one quiet line and a thin bar.
-function standingHTML() {
+// Rank, progress and streak: one muted line, at the foot of the overview.
+function standLine() {
   const pct = progressPct(), st = liveStreak();
-  return `<div class="standing"><div class="srow"><span class="rank">${esc(rankName())}</span>
-    <span class="smeta">Progress ${pct}%${st ? ` &middot; <span title="A day counts when you answer a problem. One missed day is forgiven.">${plural(st, 'day')} in a row</span>` : ''}</span></div>
-    <div class="bar" role="progressbar" aria-label="Overall progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div></div>`;
+  return `<small class="standline">${esc(rankName())} &middot; Progress ${pct}%${st ? ` &middot; <span title="A day counts when you answer a problem. One missed day is forgiven.">${plural(st, 'day')} in a row</span>` : ''} &middot; ${plural(S.total, 'problem')} answered, ${S.right} right on the first try.</small>`;
 }
 function examHTML() {
   const dte = daysToExam(), ready = SKILLS.some(isChapter);
@@ -82,21 +62,6 @@ function examHTML() {
   const left = dte === null ? '<span></span>' : `<span><b>${dte > 0 ? dte + (dte === 1 ? ' day' : ' days') : dte === 0 ? 'Today' : 'Done'}</b> ${dte >= 0 ? 'to ' + esc(label) + (CLASS.examDate ? ' (' + fmtDate(CLASS.examDate) + ')' : '') : esc(label) + ' has passed'}</span>`;
   return `<div class="exam">${left}${ready ? `<span>Readiness <b>${readiness()}%</b></span>` : ''}</div>`;
 }
-// A class with no practice skills: homework, the tutor and documents.
-function renderHomeLite() {
-  app.innerHTML = `
-  <div class="top">${brandHTML()}</div>
-  ${standingHTML()}
-  ${examHTML()}
-  ${refHTML()}
-  ${guidesSection()}
-  ${mineSection()}
-  ${docsSection()}
-  <div class="foot"><small><span id="syncnote">${syncNote()}</span> ${S.total} problems answered.</small>
-    <span><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button> ${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
-  window.scrollTo(0, 0);
-}
-
 // Today's plan: the blocks the first practice set set up for the rest of your session.
 const blockLabel = (b) => (b.kind === 'hw' ? 'Work on your homework' : SKILLS.find((s) => s.id === b.id).name);
 const planRows = (p, buttons) => `<ol class="blocks">${p.blocks.map((b, i) => {
@@ -174,7 +139,7 @@ function renderRound() {
   if (state === 'bad') fb = `<div class="fb no" role="status"><p>${p.badInput || PACK.badInput}</p></div>`;
   if (state === 'no') fb = `<div class="fb no" role="status"><h3>Not yet.</h3>${round.hinted ? `<p>You typed <b>${esc(round.hinted)}</b>. Pick the right one from these choices.</p>` : ''}<p><b>Use:</b> ${skill.rule}</p><p>${skill.tip}</p>
     <div class="acts"><button class="btn" data-act="retry">Try again</button><button class="link" data-act="show">Show me the steps</button><button class="link" data-act="follow">${round.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>
-    <a class="link" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=${encodeURIComponent(skill.video)}">Find a video on this</a></div></div>`;
+    ${videosHTML(skill.video)}</div></div>`;
   if (state === 'right') {
     const f = round.fb;
     fb = `<div class="fb good" role="status"><h3>${f.kind === 'retry' ? 'Correct on the retry.' : 'Correct.'}</h3>
@@ -184,7 +149,7 @@ function renderRound() {
     fb = `<div class="fb no" role="status"><h3>Here’s how it goes.</h3><p><b>Use:</b> ${skill.rule}</p><ol class="steps">${p.steps.map((x) => `<li>${x}</li>`).join('')}</ol>
       <p>Answer: <b>${answerText(p)}</b>. This skill will come back in later practice.</p>
       <div class="acts"><button class="btn" data-act="similar">Try a similar one</button><button class="btn alt" id="nextbtn" data-act="next">${last ? 'Finish' : 'Next'}</button>
-        <a class="link" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=${encodeURIComponent(skill.video)}">Find a video on this</a></div></div>`;
+        ${videosHTML(skill.video)}</div></div>`;
   }
   app.innerHTML = `
   <div class="rbar"><button class="link" data-act="home">‹ End session</button>${roundRefs()}<span class="progress">Problem ${round.i + 1} of ${round.n}</span></div>
@@ -259,28 +224,33 @@ app.addEventListener('click', (e) => {
   if (!t) return;
   const act = t.dataset.act;
   if (act !== 'reset' && resetArmed) resetArmed = false;
-  if (act === 'follow') { round.askOpen = !round.askOpen; renderRound(); const f = document.getElementById('ftext'); if (round.askOpen && f) f.focus(); return; }
+  if (act === 'follow') {
+    if (round) { round.askOpen = !round.askOpen; renderRound(); const f = document.getElementById('ftext'); if (round.askOpen && f) f.focus(); }
+    else if (Q) { Q.askOpen = !Q.askOpen; renderQuiz(); const f = document.getElementById('ftext'); if (Q.askOpen && f) f.focus(); }
+    return;
+  }
   if (act === 'ref') return openRef(t.dataset.k);
-  if (act === 'style') { const y = window.scrollY; S.style = STYLES[(STYLES.indexOf(S.style) + 1) % STYLES.length]; save(); renderHome(); window.scrollTo(0, y); return; }
   if (act === 'tplan') {
     const b = S.today && S.today.blocks[+t.dataset.i];
     if (!b) return;
     if (b.kind === 'skill') return startRound(Array(8).fill(b.id), 'skill', b.id);
     const hw = S.mine.find((m) => m.status !== 'done');
-    return hw ? openProblem(hw.id) : renderHome();
+    return hw ? openProblem(hw.id) : go(routeHash('hw'));
   }
   if (act === 'coach') return coachAct(lastCoach[+t.dataset.i]);
   if (act === 'plan') return askPlan();
   if (act === 'sec') {
     const z = activeZones()[+t.dataset.i], y = window.scrollY;
     S.sections = S.sections.includes(z) ? S.sections.filter((x) => x !== z) : [...S.sections, z];
-    save(); renderHome(); window.scrollTo(0, y); return;
+    save(); renderRoute(true); return;
   }
   if (act.startsWith('s-')) return settingsAct(act, t);
   if (act.startsWith('c-')) return classAct(act, t);
   if (act.startsWith('d-')) return docAct(act, t);
   if (act.startsWith('g-')) return guideAct(act, t);
   if (act.startsWith('m-')) return mineAct(act, t);
+  if (act.startsWith('ch-')) return chapterAct(act, t);
+  if (act.startsWith('b-')) return bankAct(act, t);
   if (act.startsWith('u-')) return uAct(act, t);
   if (act === 'practice') startMixed(5);
   else if (act === 'one') startMixed(1);
@@ -295,7 +265,7 @@ app.addEventListener('click', (e) => {
   else if (act === 'next') advance();
   else if (act === 'again') round.skillId ? startRound(Array(5).fill(round.skillId), 'skill', round.skillId) : startMixed(5);
   else if (act === 'reset') {
-    if (!resetArmed) { resetArmed = true; return renderHome(); }
+    if (!resetArmed) { resetArmed = true; return renderRoute(true); }
     resetArmed = false; S = fresh(); save(); renderHome();
   }
 });

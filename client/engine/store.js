@@ -22,7 +22,7 @@ function save() {
 }
 function snapshotJSON() {
   let j = JSON.stringify(S);
-  if (j.length > 900000) { const c = JSON.parse(j); (c.mine || []).forEach((m) => { delete m.chat; }); j = JSON.stringify(c); }
+  if (j.length > 900000) { const c = JSON.parse(j); (c.mine || []).forEach((m) => { delete m.chat; }); Object.values(c.bank || {}).forEach((m) => { delete m.chat; }); c.chats = {}; j = JSON.stringify(c); }
   return j;
 }
 function schedulePush() { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushNow(), 1500); }
@@ -80,6 +80,17 @@ function mergeState(a, b) {
   new Set([...Object.keys(a.cards || {}), ...Object.keys(b.cards || {})]).forEach((id) => {
     const x = (a.cards || {})[id], y = (b.cards || {})[id];
     o.cards[id] = !x ? y : !y ? x : (y.seen > x.seen || (y.seen === x.seen && (y.last || '') > (x.last || ''))) ? y : x;
+  });
+  // chapter-problem progress and saved chats: keep whichever side has more done
+  o.bank = {};
+  new Set([...Object.keys(a.bank || {}), ...Object.keys(b.bank || {})]).forEach((id) => {
+    const x = (a.bank || {})[id], y = (b.bank || {})[id];
+    o.bank[id] = !x ? y : !y ? x : (x.status === 'done') !== (y.status === 'done') ? (x.status === 'done' ? x : y) : ((y.chat || []).length > (x.chat || []).length && (y.tries || 0) >= (x.tries || 0)) ? y : x;
+  });
+  o.chats = {};
+  new Set([...Object.keys(a.chats || {}), ...Object.keys(b.chats || {})]).forEach((id) => {
+    const x = (a.chats || {})[id] || [], y = (b.chats || {})[id] || [];
+    o.chats[id] = y.length > x.length ? y : x;
   });
   o.log = (a.log || []).length >= (b.log || []).length ? a.log : b.log;
   o.today = ((a.today && a.today.day) || '') >= ((b.today && b.today.day) || '') ? a.today : b.today;

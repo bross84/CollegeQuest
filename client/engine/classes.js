@@ -60,7 +60,7 @@ function renderClasses() {
 function openClassForm(c) {
   const p = metaOf(c ? c.pack : CQ.meta[0].id).preset;
   CF = c
-    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, examLabel: c.examLabel, examDate: c.examDate, err: '', preset: null }
+    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, examLabel: c.examLabel, examDate: c.examDate, err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
     : { id: null, pack: CQ.meta[0].id, name: p.name, description: p.description, examLabel: p.examLabel, examDate: p.examDate, err: '', preset: p };
   delClassArmed = false;
   renderClassForm();
@@ -69,6 +69,7 @@ function syncCF() {
   const g = (id) => document.getElementById(id);
   if (!CF || !g('cf-name')) return;
   CF.name = g('cf-name').value; CF.description = g('cf-desc').value; CF.examLabel = g('cf-exl').value; CF.examDate = g('cf-exd').value;
+  if (g('cf-style')) CF.style = g('cf-style').value;
 }
 function renderClassForm() {
   const editing = !!CF.id;
@@ -83,6 +84,8 @@ function renderClassForm() {
     <textarea id="cf-desc" rows="4" maxlength="2000">${esc(CF.description)}</textarea>
     <label class="field" for="cf-exl">Exam or deadline <small>(optional)</small></label>
     <div class="answer"><input class="line" id="cf-exl" type="text" maxlength="60" placeholder="e.g. Exam 2" value="${esc(CF.examLabel)}"><input class="line" id="cf-exd" type="date" value="${esc(CF.examDate)}"></div>
+    ${CF.style && PACK && PACK.hasChoiceMode ? `<label class="field" for="cf-style">Practice answers <small>(how problems in practice sets are answered)</small></label>
+      <select class="line" id="cf-style">${STYLES.map((k) => `<option value="${k}" ${CF.style === k ? 'selected' : ''}>${STYLE_LABEL[k].replace('Answers: ', '')}</option>`).join('')}</select>` : ''}
     ${CF.err ? `<div class="fb no" role="status"><p>${esc(CF.err)}</p></div>` : ''}
     <div class="answer"><button class="btn" data-act="c-save">${editing ? 'Save changes' : 'Create class'}</button></div></div>
   ${editing ? `<div class="skiprow"><button class="link" data-act="c-delete">${delClassArmed ? 'Really delete the class, its progress and documents? Click again' : 'Delete this class'}</button></div>` : ''}`;
@@ -96,7 +99,7 @@ async function saveClassForm() {
       const c = await api('PATCH', `/api/classes/${CF.id}`, body);
       CLASSES = CLASSES.map((x) => (x.id === c.id ? c : x));
       const inside = CLASS && CLASS.id === c.id;
-      if (inside) CLASS = c;
+      if (inside) { CLASS = c; if (CF.style && CF.style !== S.style) { S.style = CF.style; save(); } }
       CF = null;
       if (inside) renderHome(); else renderClasses();
     } else {
@@ -139,22 +142,25 @@ async function enterClass(c) {
     CLASS = c; PACK = CQ.packs[c.pack];
     SKILLS.length = 0; SKILLS.push(...PACK.skills);
     ASK.turns = []; ASK.key = '';
+    CHAPTERS = []; PROBS = {}; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
     await loadState();
     await loadDocs();
     await loadGuides();
+    await loadChapters();
     LS.set('cq-last', c.id);
-    history.replaceState(null, '', '#/class/' + c.id);
-    renderHome();
+    const r = parseRoute();
+    if (!r || r.cid !== c.id) history.pushState(null, '', '#/class/' + c.id); // a bookmarked chapter opens where it was
+    renderRoute();
   } catch (e) {
     CLASS = null; PACK = null;
     if (e.code !== 'auth_required') { renderClasses(); app.insertAdjacentHTML('afterbegin', `<div class="fb no" role="status"><p>${esc(e.message)}</p></div>`); }
   }
 }
-async function leaveClass() {
+async function leaveClass(popped) { // popped: the browser's Back already left the class route
   if (CLASS) await pushNow();
   try { CLASSES = await api('GET', '/api/classes'); } catch (e) { /* keep the old list */ }
-  closeRef();
-  history.replaceState(null, '', location.pathname);
+  closeRef(); exitExam();
+  if (!popped) history.pushState(null, '', location.pathname);
   renderClasses();
 }
 
@@ -189,4 +195,5 @@ async function signOut() {
 function formSubmit(form) {
   if (form.dataset.form === 'login') doLogin();
   else if (form.dataset.form === 'gq') gAnswer();
+  else if (form.dataset.form === 'chapter-add') addChapter(form);
 }

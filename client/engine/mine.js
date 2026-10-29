@@ -1,6 +1,7 @@
 // "My homework": add a real problem (typed or photographed), then get your work checked.
 // The AI points at the step that went wrong and names the rule. It never hands over the answer unless asked.
-let W = { id: null, work: '', photo: null, res: null, err: '', extra: '', busy: false, ctl: null, delArmed: false };
+// The same checker runs chapter problems (W.src === 'bank'), whose progress is kept in S.bank.
+let W = { id: null, src: 'mine', chId: null, work: '', photo: null, res: null, err: '', extra: '', busy: false, ctl: null, delArmed: false };
 let addDraft = { text: '', key: '' };
 
 // The tutor's standing instructions: the pack's teaching style plus whatever the student wrote about this class.
@@ -10,7 +11,7 @@ function rules() {
     + `${PACK.tutor.style} Be brief, calm and encouraging; never shame.`;
 }
 const fmtMath = (s) => PACK.fmt(s);
-const curProblem = () => S.mine.find((m) => m.id === W.id);
+const curProblem = () => (W.src === 'bank' ? bankProblem(W.id) : S.mine.find((m) => m.id === W.id));
 const photoAccept = () => (smpLimits && smpLimits.images ? smpLimits.images.mediaTypes.join(',') : '');
 function mineRefresh() { if (W.id) renderWork(); else renderAdd(); }
 function syncInputs() {
@@ -75,9 +76,9 @@ function saveProblem() {
   addDraft = { text: '', key: '' };
   openProblem(x.id);
 }
-function openProblem(id) {
+function openProblem(id, src, chId) {
   round = null;
-  W = { id, work: '', photo: null, res: null, err: '', extra: '', busy: false, ctl: null, delArmed: false };
+  W = { id, src: src || 'mine', chId: chId || null, work: '', photo: null, res: null, err: '', extra: '', busy: false, ctl: null, delArmed: false };
   renderWork();
 }
 
@@ -92,7 +93,7 @@ function resultHTML(x) {
     const q = r.search || ((r.procedure || 'help') + ' ' + PACK.videoWord).trim();
     h += `<div class="fb no" role="status"><h3>${r.verdict === 'incomplete' ? 'Partway there.' : 'Look at this step.'}</h3>
       ${r.where ? `<p class="where">${fmtMath(r.where)}</p>` : ''}${r.procedure ? `<p><b>Use:</b> ${esc(r.procedure)}</p>` : ''}${r.note ? `<p>${esc(r.note)}</p>` : ''}
-      <div class="acts"><a class="link" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=${encodeURIComponent(q)}">Find a video on this</a>
+      <div class="acts">${videosHTML(q)}
       <button class="link" data-act="m-fix" ${W.busy ? 'disabled' : ''}>Show me the fix for that step</button><button class="link" data-act="m-full" ${W.busy ? 'disabled' : ''}>Full worked solution</button></div></div>`;
   }
   if (W.err) h += `<div class="fb no" role="status"><p>${esc(W.err)}</p></div>`;
@@ -106,8 +107,9 @@ function renderWork() {
   if (!x) return renderHome();
   const acc = photoAccept();
   const showFollow = !!smp && (!!W.askOpen || !!W.extra || (x.chat || []).length > 0);
+  const bank = W.src === 'bank';
   app.innerHTML = `<div class="rbar"><button class="link" data-act="m-home">‹ Back</button></div>
-  <div class="prob"><div class="eyebrow">My homework${x.topic ? ' &middot; ' + esc(x.topic) : ''} &middot; ${x.status === 'done' ? 'done' : 'to do'}</div><div class="qtext">${fmtMath(x.text)}</div>
+  <div class="prob"><div class="eyebrow">${bank ? `Practice problem &middot; ${x.aiKey ? 'AI-made' : 'from your materials'}` : 'My homework'}${x.topic ? ' &middot; ' + esc(x.topic) : ''} &middot; ${x.status === 'done' ? 'done' : 'to do'}</div><div class="qtext">${fmtMath(x.text)}</div>
     <label class="field" for="work">Your work or answer <small>(one step per line)</small></label>
     <textarea id="work" rows="5" placeholder="Paste your steps here, or just your answer">${esc(W.work)}</textarea>
     <div class="answer"><button class="btn" data-act="m-check" ${W.busy ? 'disabled' : ''}>${W.busy ? 'Working…' : 'Check my work'}</button>
@@ -116,7 +118,7 @@ function renderWork() {
     <div class="acts2"><small>Not sure where to start?</small><button class="link" data-act="m-start" ${W.busy ? 'disabled' : ''}>Show me the first step</button><button class="link" data-act="m-full" ${W.busy ? 'disabled' : ''}>Explain the whole thing</button>${smp && !showFollow ? '<button class="link" data-act="m-follow">Ask a question</button>' : ''}</div>
     ${resultHTML(x)}${showFollow ? followHTML() : ''}</div>
   ${inlineRefHTML(PACK.homeworkRef)}
-  <div class="skiprow"><button class="link" data-act="m-del">${W.delArmed ? 'Really delete? Click again' : 'Delete this problem'}</button>
+  <div class="skiprow">${bank ? '<span></span>' : `<button class="link" data-act="m-del">${W.delArmed ? 'Really delete? Click again' : 'Delete this problem'}</button>`}
     ${x.status === 'done' ? '' : '<button class="link" data-act="m-done">I got it, mark done</button>'}</div>`;
 }
 
@@ -129,17 +131,19 @@ function finishCorrect(x, res) {
   renderWork();
 }
 
+// true / false when the last line of the work can be compared with a numeric answer key, else null.
+function localMatch(keyText, work) {
+  const key = parseList(keyText || '');
+  if (!keyText || !key.length || key.some(Number.isNaN) || !work) return null;
+  return checkAnswer({ type: 'list', answer: key }, work.split('\n').pop());
+}
+
 async function mineCheck() {
   syncInputs();
   const x = curProblem(), work = W.work.trim();
   W.err = ''; W.extra = ''; W.res = null;
   if (!work && !W.photo) { W.err = 'Write your steps or your answer first, or add a photo.'; return renderWork(); }
-  let local = null;
-  const key = parseList(x.key || '');
-  if (x.key && key.length && !key.some(Number.isNaN) && work && !W.photo) {
-    const last = work.split('\n').pop();
-    local = checkAnswer({ type: 'list', answer: key }, last);
-  }
+  const local = !x.aiKey && work && !W.photo ? localMatch(x.key, work) : null; // an AI-written key may be wrong, so it never decides alone
   if (local === true) return finishCorrect(x, { verdict: 'correct', note: 'That matches the book.', skill: null });
   if (!smp) {
     W.err = local === false ? 'That doesn’t match the book’s answer. Re-check your steps from the top.' : mineErr({ code: 'not_granted' });
@@ -150,7 +154,7 @@ async function mineCheck() {
   const ctx = await classContext(x.text);
   const prompt = `${rules()}${ctx}\n\nCheck the student's work on this problem.\n\nProblem: ${x.text}\n`
     + (x.topic ? `It comes from a unit on: ${x.topic}. Use that unit's method and vocabulary.\n` : '')
-    + (x.key ? `The book's answer is: ${x.key} (use it to judge correctness, but never reveal it).\n` : '')
+    + (x.key ? (x.aiKey ? `A possible answer is: ${x.key}. It was written by an AI and may be wrong, so work the problem yourself and use it only as a hint (never reveal it).\n` : `The book's answer is: ${x.key} (use it to judge correctness, but never reveal it).\n`) : '')
     + `\nStudent's work (may be empty if a photo is attached):\n${work || '(see photo)'}\n\n`
     + 'Rules:\n- Find the FIRST step where they go wrong, if any.\n- NEVER state the corrected step, the correct value, or the final answer.\n- Name the short procedure or rule they should apply at that step.\n\n'
     + `Reply with only this JSON:\n{"verdict":"correct" | "error" | "incomplete","where":"quote the student's wrong line, or say what is missing; empty if correct","procedure":"short name of the rule to use at that step; empty if correct","search":"a YouTube search query for that procedure; empty if correct","skill":"one of ${SKILLS.map((s) => s.id).join(', ')}, or null","note":"one calm sentence with no answer in it"}`;

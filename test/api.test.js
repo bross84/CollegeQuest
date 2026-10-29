@@ -218,3 +218,119 @@ test('study guides: saved per class, listed with their questions, deleted with t
   assert.strictEqual((await call('DELETE', `/api/guides/${made.data.id}`, null, { Cookie: cookie })).res.status, 200);
   assert.strictEqual((await call('GET', `/api/classes/${cls.id}/guides`, null, { Cookie: cookie })).data.length, 0);
 });
+
+test('chapters: CRUD, reorder, and deleting one leaves its documents and guides unsorted', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Chapter class', pack: 'general' })).data;
+  const other = (await call('POST', '/api/classes', { name: 'Other class', pack: 'general' })).data;
+  assert.strictEqual((await call('POST', `/api/classes/${cls.id}/chapters`, { title: ' ' })).res.status, 400);
+  const c1 = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Chapter 1' })).data;
+  const c2 = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Chapter 2' })).data;
+  const foreign = (await call('POST', `/api/classes/${other.id}/chapters`, { title: 'Not yours' })).data;
+  assert.deepStrictEqual([c1.position, c2.position], [0, 1]);
+  assert.strictEqual((await call('PATCH', `/api/chapters/${c2.id}`, { position: 0 })).data.position, 0);
+  assert.deepStrictEqual((await call('GET', `/api/classes/${cls.id}/chapters`)).data.map((c) => c.title), ['Chapter 2', 'Chapter 1']);
+  assert.strictEqual((await call('PATCH', `/api/chapters/${c1.id}`, { title: 'Limits' })).data.title, 'Limits');
+  assert.strictEqual((await call('PATCH', '/api/chapters/nope', { title: 'x' })).res.status, 404);
+
+  // documents: a chapter and a tag can be set on upload (query), on notes, and changed later
+  const fd = new FormData(); fd.append('files', new Blob(['Find the limit of x as x approaches 2.']), 'exam.txt');
+  const up = (await call('POST', `/api/classes/${cls.id}/docs?chapterId=${c1.id}&tag=exam`, fd)).data[0];
+  assert.strictEqual(up.chapterId, c1.id);
+  assert.strictEqual(up.tag, 'exam');
+  const stray = (await call('POST', `/api/classes/${cls.id}/notes`, { text: 'notes', chapterId: foreign.id })).data;
+  assert.strictEqual(stray.chapterId, null, 'a chapter from another class is ignored');
+  assert.strictEqual((await call('PATCH', `/api/docs/${stray.id}`, { chapterId: c1.id, tag: 'textbook' })).data.chapterId, c1.id);
+  assert.strictEqual((await call('PATCH', `/api/docs/${stray.id}`, { chapterId: foreign.id })).data.chapterId, null);
+
+  const g = (await call('POST', `/api/classes/${cls.id}/guides`, { title: 'G', chapterId: c1.id, sections: [{ heading: 'H', summary: '', terms: [], points: [] }] })).data;
+  assert.strictEqual(g.chapterId, c1.id);
+  assert.strictEqual((await call('PATCH', `/api/guides/${g.id}`, { chapterId: c2.id })).data.chapterId, c2.id);
+  assert.deepStrictEqual((await call('GET', `/api/classes/${cls.id}/chapters`)).data.find((c) => c.id === c2.id).counts, { docs: 0, guides: 1, problems: 0 });
+
+  // search prefers the current chapter's documents
+  await call('PATCH', `/api/docs/${up.id}`, { chapterId: c2.id });
+  const hits = (await call('POST', `/api/classes/${cls.id}/search`, { q: 'limit approaches', chapterId: c2.id })).data;
+  assert.strictEqual(hits[0].doc, 'exam.txt');
+
+  assert.strictEqual((await call('DELETE', `/api/chapters/${c2.id}`)).res.status, 200);
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/docs`)).data.find((d) => d.id === up.id).chapterId, null);
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/guides`)).data[0].chapterId, null);
+});
+
+test('problems: saved per chapter, validated, deleted one by one', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Problem class', pack: 'general' })).data;
+  const ch = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Ch 1' })).data;
+  assert.strictEqual((await call('POST', `/api/chapters/${ch.id}/problems`, { problems: [{ text: '  ' }] })).res.status, 400);
+  const made = await call('POST', `/api/chapters/${ch.id}/problems`, { problems: [
+    { text: 'Solve 2x = 6', answer: '3', kind: 'original', sourceDoc: 'abc' },
+    { text: 'Solve 3x = 12', answer: '4', kind: 'similar', steps: ['Divide by 3'], topic: 'Linear' },
+  ] });
+  assert.strictEqual(made.res.status, 201);
+  assert.deepStrictEqual(made.data.map((p) => p.kind), ['original', 'similar']);
+  const list = (await call('GET', `/api/chapters/${ch.id}/problems`)).data;
+  assert.strictEqual(list.length, 2);
+  assert.deepStrictEqual(list[1].steps, ['Divide by 3']);
+  assert.strictEqual((await call('DELETE', `/api/problems/${list[0].id}`)).res.status, 200);
+  assert.strictEqual((await call('DELETE', `/api/problems/${list[0].id}`)).res.status, 404);
+  assert.strictEqual((await call('GET', `/api/chapters/${ch.id}/problems`)).data.length, 1);
+});
+
+test('videos: falls back without a key, then serves from the cache and from a live search', async () => {
+  assert.strictEqual((await call('GET', '/api/videos')).res.status, 400);
+  assert.deepStrictEqual((await call('GET', '/api/videos?q=factoring')).data, { videos: [], fallback: true });
+  assert.strictEqual((await call('GET', '/api/settings')).data.youtube.keySource, 'none');
+  db.prepare('INSERT INTO video_cache (q, json, fetched_at) VALUES (?, ?, ?)').run('cached topic', JSON.stringify([{ id: 'abc', title: 'T', channel: 'C', thumb: 'x' }]), Date.now());
+  assert.strictEqual((await call('GET', '/api/videos?q=Cached%20Topic')).data.videos[0].id, 'abc');
+  db.prepare('UPDATE video_cache SET fetched_at = ? WHERE q = ?').run(Date.now() - 31 * 24 * 3600 * 1000, 'cached topic');
+  assert.strictEqual((await call('GET', '/api/videos?q=cached%20topic')).data.fallback, true, 'a stale entry is not used without a key');
+
+  const seen = [];
+  const yt = http.createServer((req, res) => {
+    seen.push(req.url);
+    if (/q=quota/.test(req.url)) { res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end('{"error":{"code":403}}'); }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ items: [{ id: { videoId: 'v1' }, snippet: { title: 'Factoring', channelTitle: 'Prof' } }, { id: {}, snippet: {} }] }));
+  });
+  await new Promise((r) => yt.listen(0, r));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-yt-'));
+  const made = createApp(loadConfig({ DATA_DIR: dir, PUBLIC_DIR: dir, YOUTUBE_API_KEY: 'yt-key', YOUTUBE_BASE_URL: `http://127.0.0.1:${yt.address().port}` }));
+  const s = await startServer(made.app);
+  const get = async (q) => (await fetch(`http://127.0.0.1:${s.address().port}/api/videos?q=${q}`)).json();
+  const first = await get('factoring');
+  assert.strictEqual(first.videos[0].id, 'v1');
+  assert.strictEqual(first.videos.length, 1);
+  assert.match(seen[0], /videoEmbeddable=true/);
+  assert.match(seen[0], /safeSearch=strict/);
+  await get('factoring');
+  assert.strictEqual(seen.length, 1, 'the second search comes from the cache');
+  assert.deepStrictEqual(await get('quota'), { videos: [], fallback: true });
+  s.close(); yt.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('migration: a v3 database keeps its documents and guides, now unsorted', async () => {
+  const { DatabaseSync } = require('node:sqlite');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-mig-'));
+  const old = new DatabaseSync(path.join(dir, 'collegequest.db'));
+  old.exec(`
+    CREATE TABLE classes (id TEXT PRIMARY KEY, name TEXT NOT NULL, pack TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', exam_label TEXT NOT NULL DEFAULT '', exam_date TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+    CREATE TABLE class_state (class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE, t INTEGER NOT NULL, json TEXT NOT NULL);
+    CREATE TABLE documents (id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE, name TEXT NOT NULL, kind TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, file TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', use_context INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE guides (id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE, title TEXT NOT NULL, docs TEXT NOT NULL DEFAULT '[]', json TEXT NOT NULL, created_at INTEGER NOT NULL);
+    INSERT INTO classes VALUES ('c1', 'Old class', 'general', '', '', '', 1);
+    INSERT INTO documents (id, class_id, name, kind, mime, size, file, text, created_at) VALUES ('d1', 'c1', 'old.txt', 'text', 'text/plain', 3, 'c1/d1.txt', 'abc', 1);
+    INSERT INTO guides VALUES ('g1', 'c1', 'Old guide', '[]', '{"sections":[],"cards":[{"q":"q","a":"a"}]}', 1);
+    PRAGMA user_version = 3;`);
+  old.close();
+  const made = createApp(loadConfig({ DATA_DIR: dir, PUBLIC_DIR: dir }));
+  const s = await startServer(made.app);
+  const get = async (u) => (await fetch(`http://127.0.0.1:${s.address().port}${u}`)).json();
+  const doc = (await get('/api/classes/c1/docs'))[0], guide = (await get('/api/classes/c1/guides'))[0];
+  assert.strictEqual(doc.chapterId, null);
+  assert.strictEqual(doc.tag, '');
+  assert.strictEqual(guide.chapterId, null);
+  assert.strictEqual(guide.cards[0].a, 'a');
+  assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 5);
+  s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});

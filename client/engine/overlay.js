@@ -4,7 +4,7 @@ const ov = document.getElementById('ov'), ovBody = document.getElementById('ovbo
 
 function openRef(kind) {
   if (!ov || !PACK) return;
-  const tabs = [...PACK.refs.map((r) => ({ k: r.k, label: r.label })), { k: 'ask', label: 'Ask a question' }];
+  const tabs = [...PACK.refs.map((r) => ({ k: r.k, label: r.label })), { k: 'ask', label: 'Ask the tutor' }];
   const k = tabs.some((t) => t.k === kind) ? kind : tabs[0].k;
   ovTabs.innerHTML = tabs.map((t) => `<button class="link" data-ov="${t.k}">${t.label}</button>`).join('');
   const ref = PACK.refs.find((r) => r.k === k);
@@ -15,7 +15,7 @@ function openRef(kind) {
   const x = k === 'ask' ? ov.querySelector('#asktext') : null, cl = ov.querySelector('[data-ov="close"]');
   if (x) x.focus(); else if (cl) cl.focus();
 }
-function closeRef() { if (ov) ov.hidden = true; }
+function closeRef() { if (ov) { ov.hidden = true; if (ov.dataset.k === 'video') ovBody.innerHTML = ''; } } // clearing a video stops it
 
 if (ov) {
   ov.addEventListener('mouseover', (e) => { if (PACK && PACK.refHover) PACK.refHover(e); });

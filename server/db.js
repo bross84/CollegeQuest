@@ -56,6 +56,41 @@ function openDb(dataDir) {
       PRAGMA user_version = 3;
     `);
   }
+  if (v < 4) {
+    // Chapters group a class's documents, guides and problems. Rows with no chapter show as "Unsorted".
+    db.exec(`
+      CREATE TABLE chapters (
+        id TEXT PRIMARY KEY,
+        class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX chapters_class ON chapters(class_id);
+      ALTER TABLE documents ADD COLUMN chapter_id TEXT REFERENCES chapters(id) ON DELETE SET NULL;
+      ALTER TABLE documents ADD COLUMN tag TEXT NOT NULL DEFAULT '';
+      ALTER TABLE guides ADD COLUMN chapter_id TEXT REFERENCES chapters(id) ON DELETE SET NULL;
+      CREATE TABLE problems (
+        id TEXT PRIMARY KEY,
+        class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        chapter_id TEXT REFERENCES chapters(id) ON DELETE SET NULL,
+        source_doc TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT 'original',
+        text TEXT NOT NULL,
+        answer TEXT NOT NULL DEFAULT '',
+        steps TEXT NOT NULL DEFAULT '[]',
+        topic TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX problems_chapter ON problems(chapter_id);
+      CREATE INDEX problems_class ON problems(class_id);
+      PRAGMA user_version = 4;
+    `);
+  }
+  if (v < 5) {
+    // Cached YouTube searches: each live search costs 100 of the 10,000 daily quota units.
+    db.exec('CREATE TABLE video_cache (q TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL); PRAGMA user_version = 5;');
+  }
   return db;
 }
 

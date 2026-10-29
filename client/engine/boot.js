@@ -3,7 +3,7 @@ async function startApp() {
   await initAI();
   try { CLASSES = await api('GET', '/api/classes'); }
   catch (e) { if (e.code === 'auth_required') return; app.innerHTML = `<div class="fb no" role="status"><p>${esc(e.message)}</p></div>`; return; }
-  const m = location.hash.match(/^#\/class\/(\w+)/), c = m && CLASSES.find((x) => x.id === m[1]);
+  const r = parseRoute(), c = r && CLASSES.find((x) => x.id === r.cid);
   if (c) enterClass(c); else renderClasses();
 }
 
@@ -16,8 +16,4 @@ async function boot() {
   startApp();
 }
 boot();
-
-// The browser's back button from a class returns to the class list.
-window.addEventListener('hashchange', () => {
-  if (CLASS && !/^#\/class\//.test(location.hash)) leaveClass();
-});
+// Back and Forward (hashchange) are handled with the routes, in chapters.js.

@@ -1,7 +1,7 @@
 // Game state, storage, scoring, and problem selection. No DOM in here.
 // The class being studied (name, exam, notes) and its subject pack (skills, ranks, wording). Set when a class is opened.
 let PACK = null, CLASS = null;
-const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both', cards: {} });
+const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both', cards: {}, bank: {}, chats: {} });
 let S = fresh();
 
 const pad = (n) => String(n).padStart(2, '0');

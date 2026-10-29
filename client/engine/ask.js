@@ -8,7 +8,8 @@ const CHIPS = [
   ['Show another example', 'Show me one similar worked example with different numbers.'],
 ];
 
-// What the helper knows: the practice problem you are on, or the homework problem you have open.
+// What the helper knows, most specific first: the practice problem you are on, the guide question you are on, the guide
+// section you asked about, the homework or chapter problem you have open, or the chapter/course chat you are in.
 function askContext() {
   if (round && round.p && round.skill) {
     const p = round.p, revealed = round.state === 'shown' || round.state === 'right';
@@ -18,13 +19,32 @@ function askContext() {
       steps: p.steps.map(plain).join(' '), rule: plain(round.skill.rule), tried: round.state === 'no' || round.wrong.length > 0,
     };
   }
+  if (typeof Q !== 'undefined' && Q && Q.items && !round) {
+    const x = Q.items[Q.i], sec = (x.g.sections || []).find((t) => t.heading === x.c.topic);
+    return {
+      kind: 'card', key: 'card|' + x.id, hw: false, revealed: Q.state === 'right' || Q.state === 'shown', skill: x.g.title,
+      q: x.c.q, choices: Q.choices || null, answer: x.c.a, section: sec ? `${sec.heading}. ${sec.summary}` : '',
+    };
+  }
+  if (typeof GV !== 'undefined' && GV.askSec && typeof guideById === 'function' && guideById(GV.askSec.gid)) {
+    const g = guideById(GV.askSec.gid), sec = g.sections[GV.askSec.i];
+    if (sec) {
+      return {
+        kind: 'section', key: `sec|${g.id}:${GV.askSec.i}`, hw: false, revealed: true, skill: g.title, q: sec.heading, answer: '',
+        section: [sec.summary, ...sec.points.map((t) => '- ' + t), ...sec.terms.map((t) => `${t.term}: ${t.def}`)].join('\n'),
+      };
+    }
+  }
   const x = W.id ? curProblem() : null;
   if (x) {
     const extra = W.extra && W.extra !== 'Thinking…' ? W.extra : '';
     return {
-      key: 'hw|' + x.id, hw: true, revealed: !!extra || (!!W.res && W.res.verdict === 'correct'), skill: x.topic || 'My homework',
+      key: (W.src === 'bank' ? 'bk|' : 'hw|') + x.id, hw: true, revealed: !!extra || (!!W.res && W.res.verdict === 'correct'), skill: x.topic || 'My homework',
       q: plain(x.text), choices: null, answer: x.key || '', work: W.work || '', res: W.res, extra, saved: x.chat || [],
     };
+  }
+  if (typeof TUTOR_CTX !== 'undefined' && TUTOR_CTX) {
+    return { kind: 'chat', key: 'chat|' + TUTOR_CTX.id, hw: false, revealed: true, skill: TUTOR_CTX.title, q: '', answer: '', saved: (S.chats || {})[TUTOR_CTX.id] || [], chapter: TUTOR_CTX.title };
   }
   return null;
 }
@@ -37,15 +57,28 @@ function askSync(c) {
   ASK.key = k; ASK.turns = c && c.saved ? c.saved.slice() : [];
 }
 function askSave() {
-  if (ASK.key.indexOf('hw|') !== 0) return;
-  const x = S.mine.find((m) => 'hw|' + m.id === ASK.key);
-  if (x) { x.chat = ASK.turns.slice(-20); save(); }
+  const k = ASK.key;
+  if (k.indexOf('hw|') === 0) {
+    const x = S.mine.find((m) => 'hw|' + m.id === k);
+    if (x) { x.chat = ASK.turns.slice(-20); save(); }
+  } else if (k.indexOf('bk|') === 0) { bankRec(k.slice(3)).chat = ASK.turns.slice(-20); save(); }
+  else if (k.indexOf('chat|') === 0) { (S.chats || (S.chats = {}))[k.slice(5)] = ASK.turns.slice(-30); save(); }
 }
 function askInstructions(c) {
   let t = `${rules()}\n\nThe student is practicing in a quiz app and has a question. Answer it directly, in plain text, in at most about 120 words. ${PACK.ask.format} `
     + 'The student wants to understand well enough to re-explain it in their own words, so explain the idea behind the step, use a plain everyday comparison when it helps, and avoid jargon. '
     + 'If they say they are confused, come at it from a different angle than the explanation they already saw instead of repeating it. If a short worked example helps, give one with different numbers. ' + PACK.ask.extra;
   if (!c) return `${t}\n\nNo specific problem is open, so answer the question at the level of the course "${CLASS.name}".`;
+  if (c.kind === 'chat') return `${t}\n\nThe student is studying ${c.chapter === 'Course overview' ? 'the course as a whole' : `the chapter "${c.chapter}"`} of "${CLASS.name}". Answer at that level, and use the excerpts from their own materials when they help.`;
+  if (c.kind === 'section') return `${t}\n\nThe student is reading one section of a study guide that was written from their own documents. The section is "${c.q}":\n${c.section}\nAnswer their question about it. If the section is vague or looks wrong, say so and use the excerpts from their materials.`;
+  if (c.kind === 'card') {
+    t += `\n\nThe student is on this recall question from their study guide (${c.skill}): ${c.q}`;
+    if (c.choices) t += `\nThe answer choices were: ${c.choices.join(' | ')}.`;
+    if (c.section) t += `\nIt comes from this part of the guide: ${c.section}`;
+    t += c.revealed ? `\nThey have already seen the answer: ${c.answer}. Explain why it is the answer and how to remember it.`
+      : `\nThey have NOT seen the answer yet. Do not state it. Give a hint. (For your reference only, the answer is ${c.answer}.)`;
+    return t;
+  }
   if (c.hw) {
     t += `\n\nThe student is on this homework problem (${c.skill}): ${c.q}`;
     if (c.work) t += `\nTheir work so far:\n${c.work}`;
@@ -73,7 +106,7 @@ function askHTML() {
   const c = askContext();
   askSync(c);
   if (typeof smp === 'undefined' || !smp) return '<p class="lead">The AI tutor isn’t set up on this server. Add a GROQ_API_KEY or OPENROUTER_API_KEY and restart.</p>';
-  return `<p class="lead">${c ? `About this problem: <b>${esc(c.q.length > 90 ? c.q.slice(0, 90) + '…' : c.q)}</b>` : `No problem open. Ask anything about ${esc(CLASS.name)}.`}</p>
+  return `<p class="lead">${c && c.q ? `About this ${c.kind === 'section' ? 'section' : c.kind === 'card' ? 'question' : 'problem'}: <b>${esc(c.q.length > 90 ? c.q.slice(0, 90) + '…' : c.q)}</b>` : `Ask anything about ${esc(c && c.chapter && c.chapter !== 'Course overview' ? c.chapter : CLASS.name)}.`}</p>
     <div class="asklog" id="asklog" role="log" aria-live="polite">${askLogHTML()}</div>
     <label class="field" for="asktext">Your question</label>
     <textarea id="asktext" rows="3" placeholder="${esc(PACK.ask.example)}"></textarea>
@@ -82,14 +115,17 @@ function askHTML() {
     <small>Uses your AI quota when you press Ask. The AI can make mistakes, so check against your textbook.</small>`;
 }
 // Inline version: sits right under an explanation so you can ask about it without leaving the screen.
-function followHTML() {
+// opts: { title, placeholder } for places that are not a follow-up, like a chapter's tutor tab.
+let FOLLOW_OPTS = {};
+function followHTML(opts) {
+  opts = FOLLOW_OPTS = opts || {};
   const c = askContext();
-  if (!c || typeof smp === 'undefined' || !smp) return '';
+  if (!c || typeof smp === 'undefined' || !smp) return opts.title && !smp ? '<p class="lead">The AI tutor isn’t set up on this server. Add a GROQ_API_KEY or OPENROUTER_API_KEY and restart.</p>' : '';
   askSync(c);
-  return `<div class="follow" id="follow"><h3>Still unclear? Ask a follow-up</h3>
+  return `<div class="follow" id="follow"><h3>${esc(opts.title || 'Still unclear? Ask a follow-up')}</h3>
     <div class="asklog" id="flog" role="log" aria-live="polite">${askLogHTML('')}</div>
     <div class="chips">${CHIPS.map(([l, q]) => `<button type="button" class="qchip" data-ask="chip" data-q="${esc(q)}" ${ASK.busy ? 'disabled' : ''}>${l}</button>`).join('')}</div>
-    <form class="answer" id="ff" autocomplete="off"><input id="ftext" type="text" aria-label="Your follow-up question" placeholder="e.g. Why is it 2 and not 3?" value="${esc(ASK.draft)}">
+    <form class="answer" id="ff" autocomplete="off"><input id="ftext" type="text" aria-label="Your follow-up question" placeholder="${esc(opts.placeholder || 'e.g. Why is it 2 and not 3?')}" value="${esc(ASK.draft)}">
       <button class="btn" type="submit" ${ASK.busy ? 'disabled' : ''}>${ASK.busy ? 'Thinking…' : 'Ask'}</button>${ASK.busy ? '<button type="button" class="link" data-ask="stop">Stop</button>' : ''}</form>
     <small>Uses your AI quota when you ask. The AI can make mistakes, so check against your textbook.${ASK.turns.length && !ASK.busy ? ' <button type="button" class="link" data-ask="clear">Clear chat</button>' : ''}</small></div>`;
 }
@@ -111,7 +147,7 @@ function askRefresh(full) {
   if (f) {
     const fx = document.getElementById('ftext'), had = !!fx && document.activeElement === fx;
     if (fx) ASK.draft = fx.value;
-    const h = followHTML();
+    const h = followHTML(FOLLOW_OPTS);
     if (h) {
       f.outerHTML = h;
       const l = document.getElementById('flog'); if (l) l.scrollTop = l.scrollHeight;

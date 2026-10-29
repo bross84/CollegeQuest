@@ -26,6 +26,7 @@ Set these in `.env`:
 | --- | --- |
 | `APP_PASSWORD` | One shared password for the whole app. Set it: without it, anyone who can reach the page can spend your AI quota. |
 | `GROQ_API_KEY`, `OPENROUTER_API_KEY` | Set one or both. With both, `AI_PROVIDER_ORDER` (default `groq,openrouter`) decides who goes first, and the other is the fallback on rate limits or outages. |
+| `YOUTUBE_API_KEY` | Optional. A YouTube Data API v3 key lets the app play videos in place (it can also be set under AI settings). Without it, video links are plain YouTube searches. Results are cached for 30 days because each new search costs 100 of the 10,000 daily quota units. |
 | `GROQ_MODEL`, `GROQ_QUICK_MODEL`, `GROQ_VISION_MODEL`, `OPENROUTER_MODEL`, ... | Override the models. Model names change often, so check the provider catalogs if a call fails with a model error. Reading photos needs a vision-capable model. |
 | `COOKIE_SECURE`, `TRUST_PROXY`, `BIND_ADDRESS` | Behind HTTPS: `COOKIE_SECURE=true`, `TRUST_PROXY=1` (number of proxies in front), and `BIND_ADDRESS=127.0.0.1` if only a local tunnel or proxy should reach it. See below. |
 | `PORT`, `MAX_UPLOAD_MB` | Published port and per-file upload limit. |

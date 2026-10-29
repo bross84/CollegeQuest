@@ -24,6 +24,23 @@ function splitChunks(text, size = CHUNK) {
   if (text.trim()) out.push(text);
   return out;
 }
+// What to send the AI for these documents: text in chunks, photos in small batches. Also used by the chapter problem bank.
+async function docParts(picked, pasted) {
+  const lim = smpLimits && smpLimits.images, parts = [];
+  if (pasted) splitChunks(pasted.slice(0, CHUNK * 3)).forEach((t) => parts.push({ text: t }));
+  for (const d of picked.filter((x) => x.kind !== 'image')) splitChunks((await api('GET', `/api/docs/${d.id}/text`)).text).forEach((c) => parts.push({ text: c }));
+  const photos = picked.filter((x) => x.kind === 'image');
+  for (let i = 0; i < photos.length; i += lim ? lim.maxCount : 4) parts.push({ images: photos.slice(i, i + lim.maxCount).map((d) => ({ doc: d.id })) });
+  return parts;
+}
+// The prompt that lists the problems in one part. withAnswers also copies any answer key found in the material.
+function findPrompt(part, { skillHint, withAnswers, source }) {
+  return `You are helping an adult student who is taking "${CLASS.name}". Below are photos and/or text from their class materials (${source || 'a worksheet, textbook pages, or notes'}). `
+    + 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
+    + `Transcribe each problem as plain text: ${PACK.finder}. Do NOT solve anything.${withAnswers ? ' If the material has an answer key or solutions, copy the final answer for each problem into "answer"; leave "answer" empty when there is none. Never work out an answer yourself.' : ''}\n\n`
+    + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[{${['"text":"the problem"', withAnswers && '"answer":""', skillHint].filter(Boolean).join(',')}}]}\n\n`
+    + (part.text ? `Text:\n${part.text}` : '(no text, see the photos)');
+}
 function syncU() {
   const t = document.getElementById('utext'); if (t) U.text = t.value;
   document.querySelectorAll('input[data-udoc]').forEach((c) => { if (c.checked) U.docs.add(c.dataset.udoc); else U.docs.delete(c.dataset.udoc); });
@@ -68,14 +85,7 @@ async function uFind() {
   }
   U.busy = true; U.ctl = new AbortController(); U.note = 'Reading…'; renderUpload();
   try {
-    // Work out what to send: text in chunks, photos in small batches.
-    const parts = [];
-    if (pasted) splitChunks(pasted.slice(0, CHUNK * 3)).forEach((t) => parts.push({ text: t }));
-    for (const d of picked.filter((x) => x.kind !== 'image')) {
-      const t = (await api('GET', `/api/docs/${d.id}/text`)).text;
-      splitChunks(t).forEach((c) => parts.push({ text: c }));
-    }
-    for (let i = 0; i < photos.length; i += lim ? lim.maxCount : 4) parts.push({ images: photos.slice(i, i + lim.maxCount).map((d) => ({ doc: d.id })) });
+    const parts = await docParts(picked, pasted);
     const used = parts.slice(0, MAX_PARTS);
     const seen = new Set(), all = [];
     const skillHint = SKILLS.length
@@ -84,11 +94,7 @@ async function uFind() {
     for (let i = 0; i < used.length && all.length < 60; i++) {
       U.note = used.length > 1 ? `Reading part ${i + 1} of ${used.length}…` : 'Reading…'; renderUpload();
       const part = used[i];
-      const prompt = `You are helping an adult student who is taking "${CLASS.name}". Below are photos and/or text from their class materials (a worksheet, textbook pages, or notes). `
-        + 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
-        + `Transcribe each problem as plain text: ${PACK.finder}. Do NOT solve anything.\n\n`
-        + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[{"text":"the problem",${skillHint}}]}\n\n`
-        + (part.text ? `Text:\n${part.text}` : '(no text, see the photos)');
+      const prompt = findPrompt(part, { skillHint });
       const opts = { signal: U.ctl.signal };
       if (part.images) opts.images = part.images;
       const r = await smp.json(prompt, opts);
