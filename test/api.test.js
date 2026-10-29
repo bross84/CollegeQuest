@@ -130,7 +130,7 @@ test('ai: falls back to the next provider and strips reasoning', async () => {
   assert.deepStrictEqual(mockHits, ['bad', 'good']);
   assert.strictEqual((await call('POST', '/api/ai', { messages: [] })).res.status, 400);
   assert.deepStrictEqual((await call('GET', '/api/ai/status')).data.providers, ['groq', 'openrouter']);
-  const used = (await call('GET', '/api/ai/usage')).data;
+  const used = (await call('GET', '/api/ai/usage')).data.usage;
   assert.strictEqual(used.length, 1, 'only a provider that reports its limits is listed');
   assert.deepStrictEqual([used[0].provider, used[0].limitRequests, used[0].remainingRequests, used[0].remainingTokens, used[0].resetTokens], ['groq', 1000, 250, 0, '6s']);
 });

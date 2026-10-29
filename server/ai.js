@@ -43,13 +43,14 @@ function createAi(cfg, getAi) {
   }
 
   // Groq reports its limits on every response: requests are per day, tokens per minute. Keep the latest reading per model.
-  const usage = {};
+  const usage = {}, notes = {}; // notes: why a provider has no reading, so the screen can say instead of staying blank
   function noteUsage(name, model, res) {
     const num = (k) => { const v = res.headers.get(k); return v !== null && v !== '' && !Number.isNaN(+v) ? +v : null; };
     const u = { provider: name, model, at: Date.now(), limitRequests: num('x-ratelimit-limit-requests'), remainingRequests: num('x-ratelimit-remaining-requests'),
       limitTokens: num('x-ratelimit-limit-tokens'), remainingTokens: num('x-ratelimit-remaining-tokens'),
       resetRequests: res.headers.get('x-ratelimit-reset-requests'), resetTokens: res.headers.get('x-ratelimit-reset-tokens') };
-    if (u.limitRequests !== null || u.limitTokens !== null) usage[`${name}|${model}`] = u;
+    if (u.limitRequests !== null || u.limitTokens !== null) { usage[`${name}|${model}`] = u; delete notes[name]; }
+    else notes[name] = `${name} answered (HTTP ${res.status}) but sent no rate-limit headers. Headers seen: ${[...res.headers.keys()].join(', ') || 'none'}.`;
   }
 
   function classify(res, body) {
@@ -151,11 +152,12 @@ function createAi(cfg, getAi) {
 
   // A one-token request to each provider, so the limits are known before the first real call (it counts as one request).
   async function probe() {
-    for (const n of active()) { try { await callProvider(n, { messages: [{ role: 'user', content: 'Say ok.' }], images: [], maxTokens: 1 }); } catch (e) { /* a refusal still carries the headers */ } }
-    return Object.values(usage);
+    for (const n of active()) { try { await callProvider(n, { messages: [{ role: 'user', content: 'Say ok.' }], images: [], maxTokens: 1 }); } catch (e) { if (!usage[Object.keys(usage).find((k) => k.startsWith(n + '|'))]) notes[n] = `${n} refused the test request: ${e.message}`; } }
+    return report();
   }
 
-  return { status, chat, probe, usage: () => Object.values(usage) };
+  const report = () => ({ usage: Object.values(usage), notes: Object.values(notes) });
+  return { status, chat, probe, usage: report };
 }
 
 module.exports = { createAi, AiError, createThinkFilter };

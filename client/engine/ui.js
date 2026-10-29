@@ -245,6 +245,7 @@ app.addEventListener('click', (e) => {
     S.sections = S.sections.includes(z) ? S.sections.filter((x) => x !== z) : [...S.sections, z];
     save(); renderRoute(true); return;
   }
+  if (act === 'u-check') return refreshUsage(true);
   if (act.startsWith('s-')) return settingsAct(act, t);
   if (act.startsWith('c-')) return classAct(act, t);
   if (act.startsWith('d-')) return docAct(act, t);
