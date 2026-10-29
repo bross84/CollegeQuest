@@ -272,3 +272,14 @@ section.zone.form .answer { margin-top: 16px; }
 form[data-form] { display: flex; flex-direction: column; gap: 14px; }
 form[data-form] .field { margin-bottom: -6px; }
 .chk small { display: block; }
+
+/* study guides */
+.gtitle { font-size: 1.4rem; margin: 0; }
+.gsec { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.gsec h3 { font-size: 1.1rem; margin: 0; }
+.gsec p { margin: 0; }
+.gpts { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.gterms { margin: 0; display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 6px 16px; }
+.gterms dt { font-weight: 700; }
+.gterms dd { margin: 0; color: var(--muted); }
+@media (max-width: 560px) { .gterms { grid-template-columns: 1fr; gap: 0; } .gterms dd { margin-bottom: 8px; } }

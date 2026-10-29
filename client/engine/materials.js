@@ -14,11 +14,11 @@ function splitLocal(text) {
   lines.forEach((l) => { if (NUMBERED.test(l)) out.push(l.replace(NUMBERED, '')); else if (out.length) out[out.length - 1] += ' ' + l; });
   return out;
 }
-function splitChunks(text) {
+function splitChunks(text, size = CHUNK) {
   const out = [];
-  while (text.length > CHUNK) {
-    let cut = text.lastIndexOf('\n', CHUNK);
-    if (cut < CHUNK * 0.5) cut = CHUNK;
+  while (text.length > size) {
+    let cut = text.lastIndexOf('\n', size);
+    if (cut < size * 0.5) cut = size;
     out.push(text.slice(0, cut)); text = text.slice(cut);
   }
   if (text.trim()) out.push(text);

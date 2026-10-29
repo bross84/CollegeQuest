@@ -35,6 +35,7 @@ function renderDocs() {
         <small>${fmtSize(d.size)}${d.chars ? ` &middot; ${d.chars.toLocaleString()} characters read` : ''}</small></div>
       ${d.note ? `<small class="warn">${esc(d.note)}</small>` : ''}
       <div class="dact">
+        ${d.chars ? `<button class="link" data-act="g-new" data-id="${d.id}">Study guide</button>` : ''}
         ${d.kind === 'image' || d.chars ? `<button class="link" data-act="u-open" data-id="${d.id}">Find problems</button>` : ''}
         ${d.chars ? `<label class="chk"><input type="checkbox" data-act="d-ctx" data-id="${d.id}" ${d.useContext ? 'checked' : ''}> Tutor can use this</label>` : ''}
         <button class="link" data-act="d-rename" data-id="${d.id}">Rename</button>

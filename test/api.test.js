@@ -201,3 +201,20 @@ test('proxy trust: TRUST_PROXY takes a hop count, and a spoofed X-Forwarded-For 
   assert.strictEqual(last.status, 429);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('study guides: saved per class, listed with their questions, deleted with the class', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Guide class', pack: 'general' }, { Cookie: cookie })).data;
+  const empty = await call('POST', `/api/classes/${cls.id}/guides`, { title: 'x', sections: [], cards: [] }, { Cookie: cookie });
+  assert.strictEqual(empty.res.status, 400);
+  const made = await call('POST', `/api/classes/${cls.id}/guides`, {
+    title: 'Ch 1', docs: ['abc'], sections: [{ heading: 'H', summary: 's', terms: [{ term: 't', def: 'd' }], points: ['p'] }],
+    cards: [{ q: 'Q?', a: 'A', accept: [], wrong: ['x', 'y', 'z'] }],
+  }, { Cookie: cookie });
+  assert.strictEqual(made.res.status, 201);
+  const list = (await call('GET', `/api/classes/${cls.id}/guides`, null, { Cookie: cookie })).data;
+  assert.strictEqual(list.length, 1);
+  assert.strictEqual(list[0].cards[0].a, 'A');
+  assert.strictEqual(list[0].sections[0].terms[0].term, 't');
+  assert.strictEqual((await call('DELETE', `/api/guides/${made.data.id}`, null, { Cookie: cookie })).res.status, 200);
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/guides`, null, { Cookie: cookie })).data.length, 0);
+});

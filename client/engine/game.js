@@ -1,7 +1,7 @@
 // Game state, storage, scoring, and problem selection. No DOM in here.
 // The class being studied (name, exam, notes) and its subject pack (skills, ranks, wording). Set when a class is opened.
 let PACK = null, CLASS = null;
-const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both' });
+const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both', cards: {} });
 let S = fresh();
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -17,7 +17,8 @@ const liveStreak = () => (S.lastDay && dayDiff(S.lastDay, dayKey()) > 2 ? 0 : S.
 // Overall progress: every skill's score averaged and capped at the "proficient" line. A class with no skills counts finished homework.
 function progressPct() {
   if (SKILLS.length) return Math.round((SKILLS.reduce((a, s) => a + Math.min((S.skills[s.id] || {}).score || 0, 85) / 85, 0) / SKILLS.length) * 100);
-  return S.mine.length ? Math.round((S.mine.filter((m) => m.status === 'done').length / S.mine.length) * 100) : 0;
+  const cards = typeof allCards === 'function' ? allCards().length : 0, total = S.mine.length + cards;
+  return total ? Math.round(((S.mine.filter((m) => m.status === 'done').length + cardsMastered()) / total) * 100) : 0;
 }
 const rankName = () => PACK.ranks[Math.min(PACK.ranks.length - 1, Math.floor((progressPct() / 100) * PACK.ranks.length))];
 const MASTERY = ['Started', 'Developing', 'Proficient', 'Mastered'];

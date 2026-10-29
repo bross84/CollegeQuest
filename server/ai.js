@@ -53,7 +53,7 @@ function createAi(cfg, getAi) {
   }
 
   // messages: [{role, content}], images: data URLs attached to the last user message.
-  async function callProvider(name, { messages, images, quick, stream, signal, onDelta }) {
+  async function callProvider(name, { messages, images, quick, stream, signal, onDelta, maxTokens }) {
     const p = cur().providers[name];
     const model = images.length ? p.vision : quick ? p.quick : p.smart;
     const msgs = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -68,7 +68,7 @@ function createAi(cfg, getAi) {
     if (signal) { if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true }); }
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key}` };
     if (name === 'openrouter') { headers['HTTP-Referer'] = 'https://github.com/collegequest'; headers['X-Title'] = 'CollegeQuest'; }
-    const body = { model, messages: msgs, temperature: 0.3, max_tokens: cur().maxTokens, stream: !!stream };
+    const body = { model, messages: msgs, temperature: 0.3, max_tokens: maxTokens || cur().maxTokens, stream: !!stream };
     if (name === 'groq' && /gpt-oss|qwen3|deepseek/i.test(model)) body.reasoning_format = 'hidden';
     const filter = createThinkFilter();
     let text = '';

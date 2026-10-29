@@ -42,6 +42,20 @@ function openDb(dataDir) {
     `);
   }
   if (v < 2) db.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); PRAGMA user_version = 2;');
+  if (v < 3) {
+    db.exec(`
+      CREATE TABLE guides (
+        id TEXT PRIMARY KEY,
+        class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        docs TEXT NOT NULL DEFAULT '[]',
+        json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX guides_class ON guides(class_id);
+      PRAGMA user_version = 3;
+    `);
+  }
   return db;
 }
 

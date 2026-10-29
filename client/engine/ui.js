@@ -44,6 +44,7 @@ function renderHome() {
   ${todayHTML()}
   ${coachHTML()}
   ${refHTML()}
+  ${guidesSection()}
   ${mineSection()}
   ${docsSection()}
   <h2 class="part">${esc(partTitle())}</h2>
@@ -88,6 +89,7 @@ function renderHomeLite() {
   ${standingHTML()}
   ${examHTML()}
   ${refHTML()}
+  ${guidesSection()}
   ${mineSection()}
   ${docsSection()}
   <div class="foot"><small><span id="syncnote">${syncNote()}</span> ${S.total} problems answered.</small>
@@ -277,6 +279,7 @@ app.addEventListener('click', (e) => {
   if (act.startsWith('s-')) return settingsAct(act, t);
   if (act.startsWith('c-')) return classAct(act, t);
   if (act.startsWith('d-')) return docAct(act, t);
+  if (act.startsWith('g-')) return guideAct(act, t);
   if (act.startsWith('m-')) return mineAct(act, t);
   if (act.startsWith('u-')) return uAct(act, t);
   if (act === 'practice') startMixed(5);

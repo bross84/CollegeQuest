@@ -141,6 +141,7 @@ async function enterClass(c) {
     ASK.turns = []; ASK.key = '';
     await loadState();
     await loadDocs();
+    await loadGuides();
     LS.set('cq-last', c.id);
     history.replaceState(null, '', '#/class/' + c.id);
     renderHome();
@@ -187,4 +188,5 @@ async function signOut() {
 }
 function formSubmit(form) {
   if (form.dataset.form === 'login') doLogin();
+  else if (form.dataset.form === 'gq') gAnswer();
 }

@@ -76,6 +76,11 @@ function mergeState(a, b) {
     byId[m.id] = !p ? m : (p.status === 'done') !== (m.status === 'done') ? (m.status === 'done' ? m : p) : ((m.chat || []).length >= (p.chat || []).length && (m.tries || 0) >= (p.tries || 0)) ? m : p;
   });
   o.mine = Object.values(byId);
+  o.cards = {};
+  new Set([...Object.keys(a.cards || {}), ...Object.keys(b.cards || {})]).forEach((id) => {
+    const x = (a.cards || {})[id], y = (b.cards || {})[id];
+    o.cards[id] = !x ? y : !y ? x : (y.seen > x.seen || (y.seen === x.seen && (y.last || '') > (x.last || ''))) ? y : x;
+  });
   o.log = (a.log || []).length >= (b.log || []).length ? a.log : b.log;
   o.today = ((a.today && a.today.day) || '') >= ((b.today && b.today.day) || '') ? a.today : b.today;
   o.style = a.style;

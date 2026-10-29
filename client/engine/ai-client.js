@@ -63,7 +63,7 @@ function parseJsonLoose(t) {
 
 function makeSmp() {
   async function run(input, opts = {}) {
-    const body = { messages: typeof input === 'string' ? [{ role: 'user', content: input }] : input, quick: opts.modelTier === 'quick', stream: !!opts.onText };
+    const body = { messages: typeof input === 'string' ? [{ role: 'user', content: input }] : input, quick: opts.modelTier === 'quick', stream: !!opts.onText, maxTokens: opts.maxTokens };
     if (opts.images) body.images = await prepImages(opts.images);
     let text = '';
     try {

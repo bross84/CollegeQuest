@@ -104,7 +104,7 @@ function createApp(cfg) {
     }
     const ctl = new AbortController();
     res.on('close', () => { if (!res.writableEnded) ctl.abort(new Error('client closed')); });
-    const opts = { messages, images, quick: !!b.quick, signal: ctl.signal };
+    const opts = { messages, images, quick: !!b.quick, signal: ctl.signal, maxTokens: Math.min(Math.max(+b.maxTokens || 0, 0), 6000) || undefined };
     const fail = (e) => ({ code: e.code || 'ai_error', message: e.message || 'AI request failed', text: e.partial || '' });
     if (!b.stream) {
       try { return res.json({ text: await ai.chat({ ...opts, stream: false }) }); }
@@ -255,6 +255,27 @@ function createApp(cfg) {
     const d = getDoc(req, res); if (!d) return;
     db.prepare('DELETE FROM documents WHERE id = ?').run(d.id);
     fs.rmSync(path.join(uploads, d.file), { force: true });
+    res.json({ ok: true });
+  });
+  // Study guides: the client builds them (it reads the documents part by part and asks the AI), the server keeps them.
+  const guideOut = (g) => ({ id: g.id, title: g.title, docs: JSON.parse(g.docs), createdAt: g.created_at, ...JSON.parse(g.json) });
+  api.get('/classes/:id/guides', (req, res) => {
+    const c = needClass(req, res); if (!c) return;
+    res.json(db.prepare('SELECT * FROM guides WHERE class_id = ? ORDER BY created_at DESC').all(c.id).map(guideOut));
+  });
+  api.post('/classes/:id/guides', express.json({ limit: '4mb' }), (req, res) => {
+    const c = needClass(req, res); if (!c) return;
+    const b = req.body || {};
+    const sections = Array.isArray(b.sections) ? b.sections.slice(0, 200) : [], cards = Array.isArray(b.cards) ? b.cards.slice(0, 600) : [];
+    if (!sections.length && !cards.length) return res.status(400).json({ error: 'The guide is empty.' });
+    const id = newId(), docs = (Array.isArray(b.docs) ? b.docs : []).map((d) => clip(d, 40)).slice(0, 50);
+    db.prepare('INSERT INTO guides (id, class_id, title, docs, json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, c.id, clip(b.title, 120) || 'Study guide', JSON.stringify(docs), JSON.stringify({ sections, cards, note: clip(b.note, 300) }), Date.now());
+    res.status(201).json(guideOut(db.prepare('SELECT * FROM guides WHERE id = ?').get(id)));
+  });
+  api.delete('/guides/:id', (req, res) => {
+    const r = db.prepare('DELETE FROM guides WHERE id = ?').run(req.params.id);
+    if (!r.changes) return res.status(404).json({ error: 'No such guide.' });
     res.json({ ok: true });
   });
   api.post('/classes/:id/search', json, (req, res) => {
