@@ -463,3 +463,22 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .chip2:hover { border-color: var(--accent); }
 @media (max-width: 959px) { .dstats { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 959px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 16px; } .wrap:has(.shell) { padding-inline: 18px; } }
+
+/* one rhythm for every page: children of the pane and of its sections are spaced by a gap, not ad hoc margins */
+.pane { display: flex; flex-direction: column; gap: 18px; }
+.pane > .ptitle { margin-bottom: 0; }
+.pane > section.zone, .pane .ovcol > section.zone { margin-top: 10px; }
+.pane section.zone { display: flex; flex-direction: column; gap: 12px; }
+.pane section.zone > h3 { margin-bottom: 0; }
+.pane section.zone > small { margin-top: 0; }
+.pane .zone > .row2, .pane .zone > .mine, .pane .zone > .bulk { margin-bottom: 0; }
+.pane .zone.due .blocks li:first-child { padding-top: 0; }
+.lead + .answer { margin-top: 0; }
+.ovcol { display: flex; flex-direction: column; gap: 18px; }
+.pane .foot { margin-top: 18px; }
+.pane > .answer, .pane > .row2 { gap: 10px 12px; }
+.pane > .btn { align-self: flex-start; }
+.docrow .dact { row-gap: 10px; }
+.pane > .chhead { margin-bottom: 0; }
+.pane > .tabs { margin: 0; }
+.pane > .tabbody { margin-top: 2px; }
