@@ -38,7 +38,7 @@ function aiLine() {
 }
 // ---- create / edit ----
 function openClassForm(c) {
-  // A new class starts with no generated practice and blank fields; picking Chemistry or Algebra fills in its starter text.
+  // A new class starts with no generated practice and blank fields; a subject pack with its own starter text fills it in when picked.
   const first = c ? c.pack : 'general', p = metaOf(first).preset;
   CF = c
     ? { id: c.id, pack: c.pack, name: c.name, description: c.description, examLabel: c.examLabel, examDate: c.examDate, err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
@@ -58,7 +58,7 @@ function renderClassForm() {
     <span><b>${esc(m.name)}</b><small>${esc(m.blurb)}</small></span></label>`).join('');
   app.innerHTML = `<div class="rbar"><button class="link" data-act="c-cancel">‹ Back</button></div>
   <div class="prob"><div class="eyebrow">${editing ? 'Edit class' : 'Add a class'}</div>
-    ${editing ? '' : `<label class="field">Subject</label><div class="found">${packs}</div>`}
+    ${editing || CQ.meta.length < 2 ? '' : `<label class="field">Subject</label><div class="found">${packs}</div>`}
     <label class="field" for="cf-name">Class name</label>
     <input class="line" id="cf-name" type="text" maxlength="80" value="${esc(CF.name)}" placeholder="e.g. CHEM 1121">
     <label class="field" for="cf-desc">About this class <small>(the tutor reads this: course, textbook, what the exam covers, how you like things explained)</small></label>

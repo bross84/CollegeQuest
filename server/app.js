@@ -10,7 +10,7 @@ const { typeOf, extractText, search } = require('./docs');
 
 const newId = () => crypto.randomBytes(6).toString('hex');
 const clip = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-const PACKS = ['chem', 'algebra', 'general'];
+const PACKS = ['general']; // a class's subject; classes saved with a retired subject read as general
 
 function createApp(cfg) {
   const db = openDb(cfg.dataDir);
@@ -123,7 +123,7 @@ function createApp(cfg) {
   });
 
   // ---- classes ----
-  const classRow = (r) => ({ id: r.id, name: r.name, pack: r.pack, description: r.description, examLabel: r.exam_label, examDate: r.exam_date, createdAt: r.created_at });
+  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, examLabel: r.exam_label, examDate: r.exam_date, createdAt: r.created_at });
   function stats(id) {
     const out = { docs: db.prepare('SELECT COUNT(*) n FROM documents WHERE class_id = ?').get(id).n, total: 0, lastDay: null, streak: 0, openHw: 0 };
     const st = db.prepare('SELECT json FROM class_state WHERE class_id = ?').get(id);

@@ -65,15 +65,15 @@ test('api requires sign-in when APP_PASSWORD is set', async () => {
 
 test('classes: create, validate, update, delete', async () => {
   assert.strictEqual((await call('POST', '/api/classes', { name: '  ' })).res.status, 400);
-  const c = (await call('POST', '/api/classes', { name: 'CHEM 1', pack: 'chem', examDate: '2026-11-02', examLabel: 'Exam 2' })).data;
-  assert.strictEqual(c.pack, 'chem');
+  const c = (await call('POST', '/api/classes', { name: 'CHEM 1', pack: 'general', examDate: '2026-11-02', examLabel: 'Exam 2' })).data;
+  assert.strictEqual(c.pack, 'general');
   assert.strictEqual(c.examDate, '2026-11-02');
   const bogus = (await call('POST', '/api/classes', { name: 'X', pack: '../etc', examDate: 'soon' })).data;
   assert.strictEqual(bogus.pack, 'general');
   assert.strictEqual(bogus.examDate, '');
-  const up = (await call('PATCH', `/api/classes/${c.id}`, { name: 'CHEM 2', pack: 'algebra' })).data;
+  const up = (await call('PATCH', `/api/classes/${c.id}`, { name: 'CHEM 2', pack: 'chem' })).data;
   assert.strictEqual(up.name, 'CHEM 2');
-  assert.strictEqual(up.pack, 'chem', 'subject cannot change');
+  assert.strictEqual(up.pack, 'general', 'subject cannot change');
   assert.strictEqual((await call('DELETE', `/api/classes/${bogus.id}`)).res.status, 200);
   assert.strictEqual((await call('GET', `/api/classes/${bogus.id}/state`)).res.status, 404);
 });

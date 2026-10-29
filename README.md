@@ -1,11 +1,11 @@
 # College Quest
 
-A self-hosted study app. Each class is its own space with its own practice, homework help and uploaded documents. It combines the earlier ChemQuest and AlgebraQuest apps, and runs as one Docker container.
+A self-hosted study app. Each class is its own space with chapters, practice built from your own uploaded materials, homework help and documents. It runs as one Docker container.
 
 ## What it does
 
-- **Classes.** Create a space per course. Pick a subject (Chemistry, College Algebra, or Other) and describe the class; the tutor reads that description.
-- **Practice.** Chemistry and Algebra come with generated problem sets by skill. Answers are typed first (short and fuzzy: "tetra 109" works), and a miss shows multiple choice; you can switch to typed-only or choice-only. In chemistry, the periodic table (or the ion list) stays open under the problems that need it. A daily practice set, per-skill mastery, a coach that reads your history, and a suggested study plan. Progress, rank and streak are shown quietly at the top of each class.
+- **Classes.** Create a space per course and describe it; the tutor reads that description. Each class has chapters, a Practice exams page, homework and documents.
+- **Practice.** Nothing is built in. Upload practice exams, notes and readings; the AI reads the problems out (or writes new ones from the material), files each under its chapter, and you practise them chapter by chapter or as a timed mixed exam.
 - **Homework.** Add a problem (typed or photographed). The AI finds the first step that went wrong and names the rule to use, without giving the answer unless you ask.
 - **Documents.** Upload photos, PDFs, Word files and text per class. "Find problems" pulls the problems out of them into your homework list, and the tutor searches your own notes when you ask a question.
 - **Study guides.** Pick a chapter or notes and the AI reads it in parts (about 8,000 characters at a time) and writes a guide: sections with a summary, key terms and the points to know, plus recall questions. Questions are practised by typing first, with choices after a miss, and come back on a spaced schedule. Guides are kept per class and can be printed. Every class type has this, including "Other". A long chapter takes a few minutes and several AI calls, so on free-tier keys it may pause briefly for the rate limit.
@@ -81,7 +81,7 @@ test/            API tests (node --test)
 
 ### Adding a subject
 
-Copy `client/packs/general` (no practice skills) or `client/packs/algebra` (with skills), edit `meta.json` and `pack.js`, and add the pack's id to the `PACKS` list in `server/app.js`. Skill files follow the `SKILLS.push({ id, zone, name, rule, tip, video, gen() { ... } })` shape used in the existing packs.
+A subject pack can add generated practice drills for a course. Copy `client/packs/general` (no drills), edit `meta.json` and `pack.js`, add skill files that use `SKILLS.push({ id, zone, name, rule, tip, video, gen() { ... } })`, and add the pack's id to the `PACKS` list in `server/app.js`. The app ships with no drills.
 
 ## Notes
 
