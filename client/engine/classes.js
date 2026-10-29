@@ -31,31 +31,11 @@ async function doLogin() {
 }
 
 // ---- landing ----
-function classCard(c) {
-  const s = c.stats || {}, m = metaOf(c.pack);
-  const bits = [m.name, s.total ? `${s.total} problems practiced` : '', s.openHw ? `${s.openHw} open homework` : '', s.docs ? plural(s.docs, 'document') : ''].filter(Boolean);
-  const hot = c.id === lastClassId();
-  return `<div class="classcard ${hot ? 'last' : ''}"><button class="cc-main" data-act="c-open" data-id="${c.id}">
-      <span class="cc-name">${esc(c.name)}</span><span class="cc-meta">${bits.map(esc).join(' &middot; ')}</span></button>
-    <button class="link" data-act="c-edit" data-id="${c.id}" aria-label="Edit ${esc(c.name)}">Edit</button></div>`;
-}
 function aiLine() {
   return aiStatus.configured
     ? `AI tutor: ${aiStatus.providers.map((p) => (p === 'groq' ? 'Groq' : 'OpenRouter')).join(' then ')}${aiStatus.images ? '' : ' (no photo reading)'}.`
     : 'AI tutor is off: no GROQ_API_KEY or OPENROUTER_API_KEY on the server. Practice sets still work.';
 }
-function renderClasses() {
-  CLASS = null; PACK = null; round = null; W.id = null;
-  const list = CLASSES.length
-    ? `<div class="classes">${CLASSES.map(classCard).join('')}</div>`
-    : '<p class="lead">Each class is its own space, with its own practice, homework and documents. Start with one.</p>';
-  app.innerHTML = `<div class="top"><div class="brand">College Quest</div>${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button>' : ''}</div>
-  <section class="zone"><h3>Your classes</h3>${list}
-    <div class="row"><button class="btn ${CLASSES.length ? 'alt' : ''}" data-act="c-new">Add a class</button></div></section>
-  <div class="foot"><small>${esc(aiLine())}</small><button class="link" data-act="c-settings">AI settings</button></div>`;
-  window.scrollTo(0, 0);
-}
-
 // ---- create / edit ----
 function openClassForm(c) {
   const p = metaOf(c ? c.pack : CQ.meta[0].id).preset;
@@ -142,6 +122,7 @@ async function enterClass(c) {
     CLASS = c; PACK = CQ.packs[c.pack];
     SKILLS.length = 0; SKILLS.push(...PACK.skills);
     ASK.turns = []; ASK.key = '';
+    delete DASH[c.id]; dashTried.delete(c.id); // its progress will have changed by the time we come back
     CHAPTERS = []; PROBS = {}; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
     await loadState();
     await loadDocs();

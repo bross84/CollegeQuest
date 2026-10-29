@@ -14,12 +14,16 @@ const daysOff = (id) => { const s = S.skills[id]; return s && s.last ? dayDiff(s
 const isRusty = (id) => stars(id) > 0 && daysOff(id) >= 5;
 const setDoneToday = () => S.setDay === dayKey();
 const liveStreak = () => (S.lastDay && dayDiff(S.lastDay, dayKey()) > 2 ? 0 : S.streak || 0);
-// Overall progress: every skill's score averaged and capped at the "proficient" line. A class with no skills counts finished homework.
-function progressPct() {
-  if (SKILLS.length) return Math.round((SKILLS.reduce((a, s) => a + Math.min((S.skills[s.id] || {}).score || 0, 85) / 85, 0) / SKILLS.length) * 100);
-  const cards = typeof allCards === 'function' ? allCards().length : 0, total = S.mine.length + cards;
-  return total ? Math.round(((S.mine.filter((m) => m.status === 'done').length + cardsMastered()) / total) * 100) : 0;
+// Overall progress from a saved state: every skill's score averaged and capped at the "proficient" line. A class with no
+// skills counts finished homework, well-learned recall questions and finished chapter problems.
+function calcProgress(st, skills, cards, mastered, bank) {
+  if (skills.length) return Math.round((skills.reduce((a, s) => a + Math.min(((st.skills || {})[s.id] || {}).score || 0, 85) / 85, 0) / skills.length) * 100);
+  const total = (st.mine || []).length + cards + bank;
+  const done = (st.mine || []).filter((m) => m.status === 'done').length + mastered + Object.values(st.bank || {}).filter((b) => b.status === 'done').length;
+  return total ? Math.min(100, Math.round((done / total) * 100)) : 0;
 }
+const progressPct = () => calcProgress(S, SKILLS, typeof allCards === 'function' ? allCards().length : 0, typeof cardsMastered === 'function' ? cardsMastered() : 0,
+  typeof CHAPTERS !== 'undefined' ? CHAPTERS.reduce((n, c) => n + c.counts.problems, 0) : 0);
 const rankName = () => PACK.ranks[Math.min(PACK.ranks.length - 1, Math.floor((progressPct() / 100) * PACK.ranks.length))];
 const MASTERY = ['Started', 'Developing', 'Proficient', 'Mastered'];
 // Skills behind the homework problems you haven't finished yet.

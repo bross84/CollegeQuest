@@ -8,7 +8,7 @@ const root = __dirname;
 const out = path.join(root, '..', 'public');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8').replace(/\r\n/g, '\n');
 
-const ENGINE = ['util', 'game', 'ui', 'overlay', 'mine', 'materials', 'ask', 'ai-client', 'store', 'classes', 'docs', 'study', 'videos', 'chapters', 'bank', 'settings', 'boot'];
+const ENGINE = ['util', 'game', 'ui', 'overlay', 'mine', 'materials', 'ask', 'ai-client', 'store', 'classes', 'dashboard', 'docs', 'study', 'videos', 'chapters', 'bank', 'settings', 'boot'];
 
 const metas = fs.readdirSync(path.join(root, 'packs'), { withFileTypes: true })
   .filter((d) => d.isDirectory())
