@@ -209,7 +209,7 @@ const fmtNum = (x) => {
   if (a >= 1e5 || a < 1e-3) { const e = Math.floor(Math.log10(a)); return `${(x / 10 ** e).toPrecision(3)} × 10<sup>${e}</sup>`; }
   return String(+x.toPrecision(3));
 };
-const TYPING_HINT = /<br><small>(?:Scientific notation|Coefficients in order|For example|Like |Fractions like)[^<]*<\/small>/g;
+const TYPING_HINT = /<br><small>(?:Scientific notation|Coefficients in order|For example|Like |Fractions like|Fractions are|Give the shape|Write the formula with|Include the |Name the type)[^<]*<\/small>/g;
 function toChoice(p) {
   if (p.alt) return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: p.alt.choices, answer: p.alt.answer, check: null, shownAns: null, alt: null };
   if (p.type === 'choice' || !p.wrongs) return p;

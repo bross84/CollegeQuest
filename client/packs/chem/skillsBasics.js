@@ -33,7 +33,7 @@ SKILLS.push(
   gen() {
     const fam = UNITS[pick(Object.keys(UNITS))], [a, b] = shuffle(Object.keys(fam)).slice(0, 2), x = pick([dec(1, 99), dec(100, 999, 0), dec(0.1, 9.9)]);
     const ans = (x * fam[a]) / fam[b], per = fam[a] / fam[b];
-    return { q: `Convert ${x} ${a} to ${b}.<br><small>Scientific notation is fine, like 2.5e-3.</small>`, type: 'num', answer: ans, tol: 0.01, wrongs: [ans * 10, ans / 10, ans * 1000, ans / 1000, ans * 100],
+    return { q: `Convert ${x} ${a} to ${b}.<br><small>Scientific notation is fine (e notation works).</small>`, type: 'num', answer: ans, tol: 0.01, wrongs: [ans * 10, ans / 10, ans * 1000, ans / 1000, ans * 100],
       steps: [`1 ${a} = ${per} ${b}.`, `${x} ${a} × (${per} ${b} / 1 ${a}) = <b>${+ans.toPrecision(4)} ${b}</b>`] };
   },
 },

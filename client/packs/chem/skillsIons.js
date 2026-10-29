@@ -13,7 +13,7 @@ SKILLS.push(
   video: 'polyatomic ions names formulas charges memorize',
   gen() {
     const i = pickIon(), shown = ionHTML(i);
-    return { q: `Write the formula and charge of the <b>${i.name}</b> ion.<br><small>For example: SO4 2-</small>`, type: 'formula', accept: ionAccepted(i), shown, wrongs: simIons(i).map(ionHTML),
+    return { q: `Write the formula and charge of the <b>${i.name}</b> ion.<br><small>Include the charge, with plain digits for subscripts.</small>`, type: 'formula', accept: ionAccepted(i), shown, wrongs: simIons(i).map(ionHTML),
       steps: [`${i.name} is <b>${shown}</b>.`, `Charge ${i.c > 0 ? '+' : '−'}${Math.abs(i.c)}.`] };
   },
 },
@@ -34,7 +34,7 @@ SKILLS.push(
   video: 'polyatomic ion charges how to remember',
   gen() {
     const i = pickIon();
-    if (R(0, 1)) return { q: `What is the charge of the <b>${i.name}</b> ion?<br><small>Like -2 or 1</small>`, type: 'num', answer: i.c, tol: 0, wrongs: [-3, -2, -1, 1, 2], fmtAns: ox, steps: [`${i.name} is ${ionHTML(i)}: charge <b>${i.c > 0 ? '+' : '−'}${Math.abs(i.c)}</b>.`] };
+    if (R(0, 1)) return { q: `What is the charge of the <b>${i.name}</b> ion?<br><small>Include the sign for negative charges.</small>`, type: 'num', answer: i.c, tol: 0, wrongs: [-3, -2, -1, 1, 2], fmtAns: ox, steps: [`${i.name} is ${ionHTML(i)}: charge <b>${i.c > 0 ? '+' : '−'}${Math.abs(i.c)}</b>.`] };
     const wrong = shuffle(IONS.filter((x) => x.c !== i.c)).slice(0, 3).map((x) => ionHTML(x)), ans = ionHTML(i);
     const m = mc(ans, wrong);
     return { q: `Which of these has a charge of ${i.c > 0 ? '+' : '−'}${Math.abs(i.c)}?`, type: 'choice', choices: m.choices, answer: m.answer,
@@ -51,7 +51,7 @@ SKILLS.push(
     const polyAn = IONS.includes(an), cmp = compound(cat, an, polyCat, polyAn);
     const names = [cmp.name]; (an.altNames || []).forEach((n) => names.push(`${cat.name} ${n}`));
     const steps = [`${cat.name}: ${ionHTML(cat)}; ${an.name}: ${ionHTML(an)}.`, `Balance the charges so the total is 0.`];
-    if (R(0, 1)) return { q: `Write the formula for <b>${cmp.name}</b>.<br><small>For example: Ca(NO3)2</small>`, type: 'formula', accept: [normF(cmp.f)], shown: fm(cmp.f), wrongs: ((a_, g_) => { const nc = a_ / g_, na = cat.c / g_; return [ionUnit(cat, 1, polyCat) + ionUnit(an, 1, polyAn), ionUnit(cat, na, polyCat) + ionUnit(an, nc, polyAn), cat.f + (nc > 1 ? nc : '') + an.f + (na > 1 ? na : ''), ionUnit(cat, 2, polyCat) + ionUnit(an, 1, polyAn), ionUnit(cat, 1, polyCat) + ionUnit(an, 2, polyAn), ionUnit(cat, 2, polyCat) + ionUnit(an, 2, polyAn)].map(fm).filter((s) => s !== fm(cmp.f)); })(Math.abs(an.c), gcd(cat.c, Math.abs(an.c))), steps: [...steps, `<b>${fm(cmp.f)}</b>`] };
+    if (R(0, 1)) return { q: `Write the formula for <b>${cmp.name}</b>.<br><small>Write the formula with plain digits for subscripts.</small>`, type: 'formula', accept: [normF(cmp.f)], shown: fm(cmp.f), wrongs: ((a_, g_) => { const nc = a_ / g_, na = cat.c / g_; return [ionUnit(cat, 1, polyCat) + ionUnit(an, 1, polyAn), ionUnit(cat, na, polyCat) + ionUnit(an, nc, polyAn), cat.f + (nc > 1 ? nc : '') + an.f + (na > 1 ? na : ''), ionUnit(cat, 2, polyCat) + ionUnit(an, 1, polyAn), ionUnit(cat, 1, polyCat) + ionUnit(an, 2, polyAn), ionUnit(cat, 2, polyCat) + ionUnit(an, 2, polyAn)].map(fm).filter((s) => s !== fm(cmp.f)); })(Math.abs(an.c), gcd(cat.c, Math.abs(an.c))), steps: [...steps, `<b>${fm(cmp.f)}</b>`] };
     const accept = names.concat(cat.alt ? names.map((n) => n.replace(cat.name, cat.alt)) : []);
     return { q: `Name this compound: ${fm(cmp.f)}`, type: 'text', accept, wrongs: [...shuffle([...IONS.filter((x) => x.c < 0), ...SIMPLE_ANIONS].filter((x) => x !== an)).slice(0, 2).map((x) => `${cat.name} ${x.name}`), `${pick(CATIONS.filter((x) => x !== cat)).name} ${an.name}`], steps: [...steps, `<b>${cmp.name}</b>`] };
   },

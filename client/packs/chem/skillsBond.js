@@ -32,9 +32,9 @@ function checkShape(raw, geom, angle) {
   return !!hit && hit[0] === geom && nums.some((n) => Math.abs(n - angle) <= 1.5);
 }
 const shapeTyped = (g) => ({
-  type: 'shape', ph: 'e.g. tetra 109', check: (raw) => checkShape(raw, g.g, g.a), shownAns: gaLabel(g.g, g.a),
+  type: 'shape', ph: 'shape and angle', check: (raw) => checkShape(raw, g.g, g.a), shownAns: gaLabel(g.g, g.a),
   badInput: 'Type the shape and the angle, like “tetra 109”.',
-  hint: '<br><small>For example: tetra 109 (a short name and the angle are fine)</small>',
+  hint: '<br><small>Give the shape and the angle. A short name is fine.</small>',
 });
 const gaChoices = (g, byAngle) => mc(gaLabel(g.g, g.a), GA.filter(([n, a]) => (byAngle ? a !== g.a : n !== g.g)).map(([n, a]) => gaLabel(n, a)));
 function geo(m) {
@@ -180,7 +180,7 @@ SKILLS.push(
   gen() {
     const f = pick(BINARY), nm = nameBinary(f);
     if (R(0, 1)) return { q: `Name this compound: ${fm(f)}`, type: 'text', accept: [nm.name, nm.alt, nm.name.replace('phosphorus', 'phosphorous')], wrongs: badNames(f), steps: [`First element: ${nm.name.split(' ')[0]}.`, `Second element with prefix and -ide: ${nm.name.split(' ').slice(1).join(' ')}.`, `<b>${nm.name}</b>`] };
-    return { q: `Write the formula for <b>${nm.name}</b>.<br><small>For example: N2O5</small>`, type: 'formula', accept: [normF(f)], shown: fm(f), wrongs: badFormulas(f), steps: [`Prefixes give the subscripts: ${nm.name}.`, `<b>${fm(f)}</b>`] };
+    return { q: `Write the formula for <b>${nm.name}</b>.<br><small>Write the formula with plain digits for subscripts.</small>`, type: 'formula', accept: [normF(f)], shown: fm(f), wrongs: badFormulas(f), steps: [`Prefixes give the subscripts: ${nm.name}.`, `<b>${fm(f)}</b>`] };
   },
 },
 {

@@ -77,7 +77,7 @@ SKILLS.push(
     const [k, eq, why] = pick(RXN_TYPES), ans = TYPES[k];
     const m = mc(ans, Object.values(TYPES).filter((x) => x !== ans));
     return { q: `${showEq(eq)}<br>What type of reaction is this?`, type: 'choice', choices: m.choices, answer: m.answer, steps: [why, `<b>${ans}</b>`],
-      typed: { type: 'text', accept: RXN_ACCEPT[k], ph: 'e.g. redox', hint: '<br><small>For example: redox, precipitation, acid-base</small>' } };
+      typed: { type: 'text', accept: RXN_ACCEPT[k], ph: 'type of reaction', hint: '<br><small>Name the type of reaction.</small>' } };
   },
 },
 {
@@ -107,13 +107,13 @@ SKILLS.push(
   gen() {
     if (R(0, 7) === 0) {
       const el = pick(['Cl2', 'O2', 'N2', 'H2', 'P4', 'Na', 'Fe', 'Br2']);
-      return { q: `What is the oxidation number of ${fm(el.replace(/\d/g, ''))} in ${fm(el)}?<br><small>Like +5 or -2</small>`, type: 'num', answer: 0, tol: 0, wrongs: [1, -1, 2, -2], fmtAns: ox,
+      return { q: `What is the oxidation number of ${fm(el.replace(/\d/g, ''))} in ${fm(el)}?<br><small>Include the sign for negative numbers.</small>`, type: 'num', answer: 0, tol: 0, wrongs: [1, -1, 2, -2], fmtAns: ox,
         steps: ['A free element has an oxidation number of <b>0</b>.'] };
     }
     const [f, c, t] = pick(OX_BANK), cnt = parseFormula(f), others = Object.entries(cnt).filter(([e]) => e !== t);
     const sum = others.reduce((s, [e, n]) => s + OX_KNOWN[e] * n, 0), val = (c - sum) / cnt[t];
     const label = fm(c ? `${f}^${chg(c)}` : f);
-    return { q: `What is the oxidation number of <b>${t}</b> in ${label}?<br><small>Like +5 or -2</small>`, type: 'num', answer: val, tol: 0, wrongs: [-val, val + 1, val - 1, val + 2, val - 2, val * 2], fmtAns: ox,
+    return { q: `What is the oxidation number of <b>${t}</b> in ${label}?<br><small>Include the sign for negative numbers.</small>`, type: 'num', answer: val, tol: 0, wrongs: [-val, val + 1, val - 1, val + 2, val - 2, val * 2], fmtAns: ox,
       steps: [`Known: ${others.map(([e, n]) => `${n} ${e} (${ox(OX_KNOWN[e])}) = ${ox(n * OX_KNOWN[e])}`).join(', ')}.`,
         `${cnt[t] > 1 ? cnt[t] + '·' : ''}${t} + (${ox(sum)}) = ${c ? ox(c) : '0'} (the charge)`, `${t} = <b>${ox(val)}</b>`] };
   },

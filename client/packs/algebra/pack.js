@@ -12,7 +12,7 @@ return {
   hasChoiceMode: false,
   absTol: 0.006,
   badInput: 'I couldn’t read that. Try a number like 3, −2, or 3/4.',
-  ph: { list: 'e.g. 2, -5', pair: 'e.g. 3, -1', num: 'your answer' },
+  ph: { list: 'numbers, separated by commas', pair: 'two numbers, separated by a comma', num: 'your answer' },
   fmt: (s) => esc(s).replace(/\^(\([^)]*\)|-?\w+)/g, (m, e) => `<sup>${e.replace(/^\(|\)$/g, '')}</sup>`).replace(/sqrt\(/g, '√('),
   answerText(p) {
     if (p.type === 'num') return showNum(p.answer);

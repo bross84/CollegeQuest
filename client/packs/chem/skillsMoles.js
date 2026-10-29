@@ -43,7 +43,7 @@ SKILLS.push(
   video: 'avogadro number mole conversions molecules grams',
   gen() {
     const f = pick(MM_BANK.filter((x) => molarMass(x) > 17)), M = molarMass(f), t = R(0, 2);
-    const note = '<br><small>Scientific notation: 3.57e23 or 3.57 x 10^23. Use 6.02 x 10^23.</small>';
+    const note = '<br><small>Scientific notation works (e notation or x 10^). Use 6.02 x 10^23.</small>';
     if (t === 0) {
       const g = dec(5, 120), n = g / M, N = n * AVO;
       return { q: `${g} g of ${fm(f)} contains how many molecules?${note}`, type: 'num', answer: N, tol: 0.01, wrongs: [n, g * AVO, N * 10, N / 10],

@@ -61,7 +61,7 @@ SKILLS.push(
     if (R(0, 1)) return { q: `${f}<br>Find the horizontal intercept.`, type: 'num', answer: p,
       steps: [`Set the top to 0: ${lead(a)}${fac(p)} = 0.`, `<b>x = ${sgn(p)}</b>`] };
     const v = (-a * p) / (q * r);
-    return { q: `${f}<br>Find the vertical intercept, f(0).<br><small>Fractions like 3/4 are fine</small>`, type: 'num', answer: v,
+    return { q: `${f}<br>Find the vertical intercept, f(0).<br><small>Fractions are fine</small>`, type: 'num', answer: v,
       steps: [`Plug in 0: ${fr(sgn(a) + '·' + pn(-p), pn(-q) + '·' + pn(-r))}`, `= ${fr(sgn(-a * p), sgn(q * r))} = <b>${F(-a * p, q * r)}</b>`] };
   },
 },
@@ -88,7 +88,7 @@ SKILLS.push(
     const t = R(0, 3);
     if (t === 0) {
       const a = nz(-5, 5), b = nz(-9, 9), k = R(-9, 9), v = (k - b) / a;
-      return { q: `f(x) = ${poly([[a, 'x'], [b, '']])}<br>Find f<sup>−1</sup>(${sgn(k)}).<br><small>Fractions like 3/4 are fine</small>`, type: 'num', answer: v,
+      return { q: `f(x) = ${poly([[a, 'x'], [b, '']])}<br>Find f<sup>−1</sup>(${sgn(k)}).<br><small>Fractions are fine</small>`, type: 'num', answer: v,
         steps: [`f<sup>−1</sup>(${sgn(k)}) is the x that makes f(x) = ${sgn(k)}.`, `${poly([[a, 'x'], [b, '']])} = ${sgn(k)} → ${poly([[a, 'x']])} = ${sgn(k - b)}`, `<b>x = ${F(k - b, a)}</b>`] };
     }
     if (t === 1) {

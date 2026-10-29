@@ -23,7 +23,7 @@ return {
   looseUnits: true, // a typed number may be followed by a unit
   checkShape,
   badInput: 'I couldn’t read that. Try a number like 3, −2, 0.25, or 3.5e23.',
-  ph: { list: 'e.g. 2, -5', pair: 'e.g. 3, -1', seq: 'e.g. 2, 1, 2', text: 'type the name', formula: 'e.g. Ca(NO3)2 or SO4 2-', num: 'your answer' },
+  ph: { list: 'numbers, separated by commas', pair: 'two numbers, separated by a comma', seq: 'coefficients, separated by commas', text: 'type the name', formula: 'type the formula', num: 'your answer' },
   fmt: (s) => esc(s).replace(/([A-Za-z)])(\d+)/g, '$1<sub>$2</sub>').replace(/\^(\([^)]*\)|-?\w+)/g, (m, e) => `<sup>${e.replace(/^\(|\)$/g, '')}</sup>`).replace(/sqrt\(/g, '√('),
   refs: [{ k: 'pt', label: 'Periodic table', html: ptHTML }, { k: 'ions', label: 'Polyatomic ions', html: ionsHTML }],
   refHover,

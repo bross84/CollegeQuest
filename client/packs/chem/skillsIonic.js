@@ -90,7 +90,7 @@ SKILLS.push(
     if (R(0, 1)) {
       const { c, a, r } = pairs(), f = fml(c, a).f, ans = r.s ? 'Soluble' : 'Insoluble', mm = mc(ans, [r.s ? 'Insoluble' : 'Soluble']);
       return { q: `Is ${fm(f)} soluble or insoluble in water?`, type: 'choice', choices: mm.choices, answer: mm.answer, steps: [r.why, `<b>${ans}</b>`],
-        typed: { type: 'text', accept: r.s ? ['Soluble', 'sol'] : ['Insoluble', 'ins', 'insol', 'not soluble'], ph: 'soluble or insoluble' } };
+        typed: { type: 'text', accept: r.s ? ['Soluble', 'sol'] : ['Insoluble', 'ins', 'insol', 'not soluble'], ph: 'your answer' } };
     }
     const wantSol = R(0, 1) === 1, pool = [];
     for (let n = 0; n < 200 && pool.length < 40; n++) { const p = pairs(); pool.push(p); }
