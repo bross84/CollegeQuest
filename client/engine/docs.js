@@ -39,7 +39,6 @@ function docRowHTML(d, bulk) {
         <select class="line sm" data-dmove="${d.id}" aria-label="Chapter">${chapterOptions(d.chapterId)}</select>
         ${canBank ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${BK.busy ? 'disabled' : ''}>${allProblems().some((p) => p.sourceDoc === d.id) ? 'Read problems again' : 'Read its problems'}</button>` : ''}
         ${d.chars ? `<button class="link" data-act="g-new" data-id="${d.id}">Study guide</button>` : ''}
-        ${d.kind === 'image' || d.chars ? `<button class="link" data-act="u-open" data-id="${d.id}">Find problems</button>` : ''}
         ${d.chars ? `<label class="chk"><input type="checkbox" data-act="d-ctx" data-id="${d.id}" ${d.useContext ? 'checked' : ''}> Tutor can use this</label>` : ''}
         <button class="link" data-act="d-rename" data-id="${d.id}">Rename</button>
         <button class="link" data-act="d-del" data-id="${d.id}">${DU.delId === d.id ? 'Really delete? Click again' : 'Delete'}</button>
@@ -129,7 +128,7 @@ async function docAct(act, t) {
     refreshDocs();
   } else if (act === 'd-del') {
     if (DU.delId !== id) { DU.delId = id; return refreshDocs(); }
-    try { await api('DELETE', `/api/docs/${id}`); DOCS = DOCS.filter((x) => x.id !== id); U.docs.delete(id); DSEL.delete(id); PLOADED = false; PROBS = {}; await loadChapters(); loadProblems().then(() => refreshDocs()); } catch (e) { DU.err = e.message; }
+    try { await api('DELETE', `/api/docs/${id}`); DOCS = DOCS.filter((x) => x.id !== id); DSEL.delete(id); PLOADED = false; PROBS = {}; await loadChapters(); loadProblems().then(() => refreshDocs()); } catch (e) { DU.err = e.message; }
     DU.delId = null; refreshDocs();
   }
 }

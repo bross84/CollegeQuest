@@ -252,7 +252,6 @@ app.addEventListener('click', (e) => {
   if (act.startsWith('m-')) return mineAct(act, t);
   if (act.startsWith('ch-')) return chapterAct(act, t);
   if (act.startsWith('b-')) return bankAct(act, t);
-  if (act.startsWith('u-')) return uAct(act, t);
   if (act === 'practice') startMixed(5);
   else if (act === 'one') startMixed(1);
   else if (act === 'skill') startRound(Array(5).fill(t.dataset.id), 'skill', t.dataset.id);

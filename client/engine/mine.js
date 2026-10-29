@@ -38,8 +38,8 @@ function mineSection() {
   const row = (x) => `<button class="mine-item" data-act="m-open" data-id="${x.id}"><span class="mtext">${fmtMath(x.text)}</span>
     <span class="pill ${x.status}">${x.status === 'done' ? 'Done' : x.tries ? 'In progress' : 'To do'}</span></button>`;
   return `<section class="zone"><h3>My homework${items.length ? ` &middot; ${open} open` : ''}</h3><div class="mine">${items.map(row).join('')}
-    <div class="row"><button class="btn ${items.length ? 'alt' : ''}" data-act="m-add">Add a problem</button><button class="btn alt" data-act="u-open">Upload worksheet or pages</button></div></div>
-    ${items.length ? '' : '<small>Stuck on real problems? Upload your worksheet or type one, and I’ll check your work, point at the step that went wrong, and name the rule to use. I won’t hand you the answer unless you ask.</small>'}</section>`;
+    <div class="row"><button class="btn ${items.length ? 'alt' : ''}" data-act="m-add">Add a problem</button></div></div>
+    ${items.length ? '' : '<small>Stuck on a real problem? Type or photograph it, and I’ll check your work, point at the step that went wrong, and name the rule to use. I won’t hand you the answer unless you ask.</small>'}</section>`;
 }
 
 // ---- add a problem ----
