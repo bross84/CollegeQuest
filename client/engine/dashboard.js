@@ -38,9 +38,10 @@ const lastStudied = (d) => {
   return n <= 0 ? 'Studied today' : n === 1 ? 'Studied yesterday' : `Studied ${n} days ago`;
 };
 const examLine = (c) => {
-  if (!c.examDate) return '';
-  const n = dayDiff(dayKey(), c.examDate), label = c.examLabel || 'Exam';
-  return n > 0 ? `<b>${n}</b> ${n === 1 ? 'day' : 'days'} to ${esc(label)}` : n === 0 ? `${esc(label)} is <b>today</b>` : `${esc(label)} has passed`;
+  const k = keyDate(c);
+  if (!k) return '';
+  const n = dayDiff(dayKey(), k.date), label = k.label || 'Exam';
+  return n > 0 ? `<b>${n}</b> ${n === 1 ? 'day' : 'days'} to ${esc(label)}` : `${esc(label)} is <b>today</b>`;
 };
 
 function dashMenuHTML() {
@@ -67,7 +68,7 @@ function dashCardHTML(c) {
       <small>${s.docs ? plural(s.docs, 'document') : 'No documents yet'}</small><div class="acts">${open}<button class="link" data-act="c-edit" data-id="${c.id}">Edit</button></div></article>`;
   }
   const chips = d.chapters.slice(0, 5).map((ch) => `<a class="chip2" href="#/class/${c.id}/ch/${ch.id}/practice">${esc(ch.title)}${d.chDue[ch.id] ? ` <span class="count due">${d.chDue[ch.id]}</span>` : ''}</a>`).join('');
-  return `<article class="dcard"><header><div><h2>${esc(c.name)}</h2><small>${esc(m.name)}${c.examDate ? ' · ' + examLine(c) : ''}</small></div><span class="pct">${d.pct}%</span></header>
+  return `<article class="dcard"><header><div><h2>${esc(c.name)}</h2><small>${esc(m.name)}${keyDate(c) ? ' · ' + examLine(c) : ''}</small></div><span class="pct">${d.pct}%</span></header>
     <div class="bar" role="progressbar" aria-label="Progress in ${esc(c.name)}" aria-valuenow="${d.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${d.pct}%"></i></div>
     <small>${esc(d.rank)} · ${lastStudied(d)}${d.streak ? ` · ${plural(d.streak, 'day')} in a row` : ''}</small>
     <dl class="dstats"><div><dt>Recall due</dt><dd class="${d.due ? 'hot' : ''}">${d.due}</dd></div><div><dt>Homework open</dt><dd class="${d.openHw ? 'hot' : ''}">${d.openHw}</dd></div>

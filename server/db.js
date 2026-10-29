@@ -107,6 +107,14 @@ function openDb(dataDir) {
       PRAGMA user_version = 6;
     `);
   }
+  if (v < 7) {
+    // A class has several key dates (when it starts, each exam, the final) instead of the one exam_label/exam_date pair.
+    db.exec(`
+      ALTER TABLE classes ADD COLUMN dates TEXT NOT NULL DEFAULT '[]';
+      UPDATE classes SET dates = json_array(json_object('label', CASE WHEN exam_label = '' THEN 'Exam' ELSE exam_label END, 'date', exam_date)) WHERE exam_date <> '';
+      PRAGMA user_version = 7;
+    `);
+  }
   return db;
 }
 

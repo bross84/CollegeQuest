@@ -46,8 +46,8 @@ function practiceSetsHTML() {
 
 // The subject's reference screens (periodic table, ion list) live in the practice toolbar, not on the class pages.
 const roundRefs = () => [...PACK.refs.map((r) => `<button class="link" data-act="ref" data-k="${r.k}">${r.label}</button>`), '<button class="link" data-act="ref" data-k="ask">Ask the tutor</button>'].join('');
-const coreName = () => (CLASS.examLabel ? CLASS.examLabel + ' material' : PACK.coreName);
-const partTitle = () => (CLASS.examLabel ? CLASS.examLabel + (CLASS.examDate ? ' · ' + fmtDate(CLASS.examDate) : '') : PACK.coreTitle);
+const coreName = () => { const k = keyDate(CLASS); return k && k.label ? k.label + ' material' : PACK.coreName; };
+const partTitle = () => { const k = keyDate(CLASS); return k && k.label ? k.label + ' · ' + fmtDate(k.date) : PACK.coreTitle; };
 const fmtDate = (d) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const brandHTML = () => `<div class="brandbox"><button class="link" data-act="c-classes">‹ Classes</button><div class="brand">${esc(CLASS.name)}</div></div>`;
 // Rank, progress and streak: one muted line, at the foot of the overview.
@@ -58,9 +58,10 @@ function standLine() {
 function examHTML() {
   const dte = daysToExam(), ready = SKILLS.some(isChapter);
   if (dte === null && !ready) return '';
-  const label = CLASS.examLabel || 'the exam';
-  const left = dte === null ? '<span></span>' : `<span><b>${dte > 0 ? dte + (dte === 1 ? ' day' : ' days') : dte === 0 ? 'Today' : 'Done'}</b> ${dte >= 0 ? 'to ' + esc(label) + (CLASS.examDate ? ' (' + fmtDate(CLASS.examDate) + ')' : '') : esc(label) + ' has passed'}</span>`;
-  return `<div class="exam">${left}${ready ? `<span>Readiness <b>${readiness()}%</b></span>` : ''}</div>`;
+  const k = keyDate(CLASS), label = (k && k.label) || 'the exam';
+  const left = dte === null ? '<span></span>' : `<span><b>${dte > 0 ? dte + (dte === 1 ? ' day' : ' days') : dte === 0 ? 'Today' : 'Done'}</b> ${dte >= 0 ? 'to ' + esc(label) + (k ? ' (' + fmtDate(k.date) + ')' : '') : esc(label) + ' has passed'}</span>`;
+  const all = (CLASS.dates || []).length > 1 ? `<small class="kdates">${CLASS.dates.map((d) => `${esc(d.label || 'Date')} ${fmtDate(d.date)}`).join(' &middot; ')}</small>` : '';
+  return `<div class="exam">${left}${ready ? `<span>Readiness <b>${readiness()}%</b></span>` : ''}</div>${all}`;
 }
 // Today's plan: the blocks the first practice set set up for the rest of your session.
 const blockLabel = (b) => (b.kind === 'hw' ? 'Work on your homework' : SKILLS.find((s) => s.id === b.id).name);

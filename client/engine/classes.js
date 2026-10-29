@@ -41,15 +41,15 @@ function openClassForm(c) {
   // A new class starts with no generated practice and blank fields; a subject pack with its own starter text fills it in when picked.
   const first = c ? c.pack : 'general', p = metaOf(first).preset;
   CF = c
-    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, examLabel: c.examLabel, examDate: c.examDate, err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
-    : { id: null, pack: first, name: p.name, description: p.description, examLabel: p.examLabel, examDate: p.examDate, err: '', preset: p };
+    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, dates: c.dates.map((d) => ({ ...d })), err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
+    : { id: null, pack: first, name: p.name, description: p.description, dates: [{ label: 'Class starts', date: '' }, { label: 'Final exam', date: '' }], err: '', preset: p };
   delClassArmed = false;
   renderClassForm();
 }
 function syncCF() {
   const g = (id) => document.getElementById(id);
   if (!CF || !g('cf-name')) return;
-  CF.name = g('cf-name').value; CF.description = g('cf-desc').value; CF.examLabel = g('cf-exl').value; CF.examDate = g('cf-exd').value;
+  CF.name = g('cf-name').value; CF.description = g('cf-desc').value; CF.dates = [...document.querySelectorAll('.kdrow')].map((r) => ({ label: r.querySelector('.kd-l').value, date: r.querySelector('.kd-d').value }));
   if (g('cf-style')) CF.style = g('cf-style').value;
 }
 function renderClassForm() {
@@ -63,8 +63,9 @@ function renderClassForm() {
     <input class="line" id="cf-name" type="text" maxlength="80" value="${esc(CF.name)}" placeholder="e.g. CHEM 1121">
     <label class="field" for="cf-desc">About this class <small>(the tutor reads this: course, textbook, what the exam covers, how you like things explained)</small></label>
     <textarea id="cf-desc" rows="4" maxlength="2000">${esc(CF.description)}</textarea>
-    <label class="field" for="cf-exl">Exam or deadline <small>(optional)</small></label>
-    <div class="answer"><input class="line" id="cf-exl" type="text" maxlength="60" placeholder="e.g. Exam 2" value="${esc(CF.examLabel)}"><input class="line" id="cf-exd" type="date" value="${esc(CF.examDate)}"></div>
+    <label class="field">Key dates <small>(when the class starts, each exam, the final. Rows with no date are ignored.)</small></label>
+    ${CF.dates.map((d, i) => `<div class="answer kdrow"><input class="line kd-l" type="text" maxlength="60" placeholder="e.g. Exam 2" aria-label="What happens" value="${esc(d.label)}"><input class="line kd-d" type="date" aria-label="Date" value="${esc(d.date)}"><button class="link" data-act="c-deldate" data-i="${i}">Remove</button></div>`).join('')}
+    ${CF.dates.length < 12 ? '<div class="answer"><button class="link" data-act="c-adddate">+ Add a date</button></div>' : ''}
     ${CF.style && PACK && PACK.hasChoiceMode ? `<label class="field" for="cf-style">Practice answers <small>(how problems in practice sets are answered)</small></label>
       <select class="line" id="cf-style">${STYLES.map((k) => `<option value="${k}" ${CF.style === k ? 'selected' : ''}>${STYLE_LABEL[k].replace('Answers: ', '')}</option>`).join('')}</select>` : ''}
     ${CF.err ? `<div class="fb no" role="status"><p>${esc(CF.err)}</p></div>` : ''}
@@ -74,7 +75,7 @@ function renderClassForm() {
 async function saveClassForm() {
   syncCF();
   if (!CF.name.trim()) { CF.err = 'Give the class a name.'; return renderClassForm(); }
-  const body = { name: CF.name, description: CF.description, examLabel: CF.examLabel, examDate: CF.examDate };
+  const body = { name: CF.name, description: CF.description, dates: CF.dates };
   try {
     if (CF.id) {
       const c = await api('PATCH', `/api/classes/${CF.id}`, body);
@@ -153,6 +154,8 @@ function classAct(act, t) {
   else if (act === 'c-new') openClassForm(null);
   else if (act === 'c-edit') openClassForm(CLASSES.find((x) => x.id === t.dataset.id) || CLASS);
   else if (act === 'c-cancel') { CF = null; if (CLASS) renderHome(); else renderClasses(); }
+  else if (act === 'c-adddate') { syncCF(); CF.dates.push({ label: '', date: '' }); renderClassForm(); }
+  else if (act === 'c-deldate') { syncCF(); CF.dates.splice(+t.dataset.i, 1); renderClassForm(); }
   else if (act === 'c-save') saveClassForm();
   else if (act === 'c-delete') deleteClass();
   else if (act === 'c-settings') openSettings();
@@ -163,7 +166,6 @@ function classAct(act, t) {
     // keep what was typed unless it is still the previous subject's starter text
     if (!CF.name || (old && CF.name === old.name)) CF.name = p.name;
     if (!CF.description || (old && CF.description === old.description)) CF.description = p.description;
-    if (!CF.examLabel || (old && CF.examLabel === old.examLabel)) { CF.examLabel = p.examLabel; CF.examDate = p.examDate; }
     CF.pack = t.dataset.id; CF.preset = p;
     renderClassForm();
   }

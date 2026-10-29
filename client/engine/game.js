@@ -103,7 +103,9 @@ const recent = (id, n = 8) => S.log.filter((e) => e.s === id).slice(-n);
 const firstTry = (es) => es.filter((e) => e.k === 'first').length;
 const activeZones = () => PACK.zones.filter((z) => SKILLS.some((s) => s.zone === z));
 const chapterZones = () => activeZones().filter((z) => SKILLS.some((s) => s.zone === z && s.core));
-const daysToExam = () => (CLASS.examDate ? dayDiff(dayKey(), CLASS.examDate) : null);
+// The next key date of a class that hasn't passed yet ({ label, date }), or null. Dates are kept in order, so the first upcoming one wins.
+const keyDate = (c) => (c.dates || []).find((d) => d.date >= dayKey()) || null;
+const daysToExam = () => { const k = keyDate(CLASS); return k ? dayDiff(dayKey(), k.date) : null; };
 // How ready you look: average of each core skill's score, capped at the 3-star line (85).
 const readiness = () => { const cs = SKILLS.filter(isChapter); return Math.round((cs.reduce((s, k) => s + Math.min(((S.skills[k.id] || {}).score || 0), 85) / 85, 0) / (cs.length || 1)) * 100); };
 function sectionStats(z) {

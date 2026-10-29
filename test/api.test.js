@@ -65,12 +65,12 @@ test('api requires sign-in when APP_PASSWORD is set', async () => {
 
 test('classes: create, validate, update, delete', async () => {
   assert.strictEqual((await call('POST', '/api/classes', { name: '  ' })).res.status, 400);
-  const c = (await call('POST', '/api/classes', { name: 'CHEM 1', pack: 'general', examDate: '2026-11-02', examLabel: 'Exam 2' })).data;
+  const c = (await call('POST', '/api/classes', { name: 'CHEM 1', pack: 'general', dates: [{ label: 'Final', date: '2026-12-10' }, { label: 'Starts', date: '2026-08-24' }, { label: 'Bad', date: 'soon' }] })).data;
   assert.strictEqual(c.pack, 'general');
-  assert.strictEqual(c.examDate, '2026-11-02');
-  const bogus = (await call('POST', '/api/classes', { name: 'X', pack: '../etc', examDate: 'soon' })).data;
+  assert.deepStrictEqual(c.dates, [{ label: 'Starts', date: '2026-08-24' }, { label: 'Final', date: '2026-12-10' }], 'sorted by date, invalid dates dropped');
+  const bogus = (await call('POST', '/api/classes', { name: 'X', pack: '../etc', dates: 'soon' })).data;
   assert.strictEqual(bogus.pack, 'general');
-  assert.strictEqual(bogus.examDate, '');
+  assert.deepStrictEqual(bogus.dates, []);
   const up = (await call('PATCH', `/api/classes/${c.id}`, { name: 'CHEM 2', pack: 'chem' })).data;
   assert.strictEqual(up.name, 'CHEM 2');
   assert.strictEqual(up.pack, 'general', 'subject cannot change');
@@ -369,7 +369,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
     CREATE TABLE documents (id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE, name TEXT NOT NULL, kind TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, file TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', use_context INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
     CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE guides (id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE, title TEXT NOT NULL, docs TEXT NOT NULL DEFAULT '[]', json TEXT NOT NULL, created_at INTEGER NOT NULL);
-    INSERT INTO classes VALUES ('c1', 'Old class', 'general', '', '', '', 1);
+    INSERT INTO classes VALUES ('c1', 'Old class', 'general', '', 'Exam 2', '2026-11-02', 1);
     INSERT INTO documents (id, class_id, name, kind, mime, size, file, text, created_at) VALUES ('d1', 'c1', 'old.txt', 'text', 'text/plain', 3, 'c1/d1.txt', 'abc', 1);
     INSERT INTO guides VALUES ('g1', 'c1', 'Old guide', '[]', '{"sections":[],"cards":[{"q":"q","a":"a"}]}', 1);
     PRAGMA user_version = 3;`);
@@ -383,6 +383,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.chapterId, null);
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 7);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -123,7 +123,7 @@ function createApp(cfg) {
   });
 
   // ---- classes ----
-  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, examLabel: r.exam_label, examDate: r.exam_date, createdAt: r.created_at });
+  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, dates: JSON.parse(r.dates || '[]'), createdAt: r.created_at });
   function stats(id) {
     const out = { docs: db.prepare('SELECT COUNT(*) n FROM documents WHERE class_id = ?').get(id).n, total: 0, lastDay: null, streak: 0, openHw: 0 };
     const st = db.prepare('SELECT json FROM class_state WHERE class_id = ?').get(id);
@@ -141,8 +141,11 @@ function createApp(cfg) {
     if (!partial || b.name !== undefined) out.name = clip(b.name, 80);
     if (!partial || b.pack !== undefined) out.pack = PACKS.includes(b.pack) ? b.pack : 'general';
     if (!partial || b.description !== undefined) out.description = clip(b.description, 2000);
-    if (!partial || b.examLabel !== undefined) out.examLabel = clip(b.examLabel, 60);
-    if (!partial || b.examDate !== undefined) out.examDate = /^\d{4}-\d{2}-\d{2}$/.test(b.examDate || '') ? b.examDate : '';
+    if (!partial || b.dates !== undefined) {
+      out.dates = JSON.stringify((Array.isArray(b.dates) ? b.dates : []).slice(0, 12)
+        .map((d) => ({ label: clip(d && d.label, 60), date: /^\d{4}-\d{2}-\d{2}$/.test((d && d.date) || '') ? d.date : '' }))
+        .filter((d) => d.date).sort((a, b2) => (a.date < b2.date ? -1 : a.date > b2.date ? 1 : 0)));
+    }
     return out;
   }
   const getClass = (id) => db.prepare('SELECT * FROM classes WHERE id = ?').get(id);
@@ -155,8 +158,8 @@ function createApp(cfg) {
     const c = classInput(req.body || {}, false);
     if (!c.name) return res.status(400).json({ error: 'Give the class a name.' });
     const id = newId();
-    db.prepare('INSERT INTO classes (id, name, pack, description, exam_label, exam_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, c.name, c.pack, c.description, c.examLabel, c.examDate, Date.now());
+    db.prepare('INSERT INTO classes (id, name, pack, description, dates, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, c.name, c.pack, c.description, c.dates, Date.now());
     res.status(201).json({ ...classRow(getClass(id)), stats: stats(id) });
   });
   api.patch('/classes/:id', json, (req, res) => {
@@ -164,7 +167,7 @@ function createApp(cfg) {
     const c = classInput(req.body || {}, true);
     if (c.name === '') return res.status(400).json({ error: 'Give the class a name.' });
     delete c.pack; // the subject can't change once progress exists
-    const col = { name: 'name', description: 'description', examLabel: 'exam_label', examDate: 'exam_date' };
+    const col = { name: 'name', description: 'description', dates: 'dates' };
     for (const [k, v] of Object.entries(c)) db.prepare(`UPDATE classes SET ${col[k]} = ? WHERE id = ?`).run(v, cur.id);
     res.json({ ...classRow(getClass(cur.id)), stats: stats(cur.id) });
   });
