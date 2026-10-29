@@ -38,10 +38,11 @@ function aiLine() {
 }
 // ---- create / edit ----
 function openClassForm(c) {
-  const p = metaOf(c ? c.pack : CQ.meta[0].id).preset;
+  // A new class starts with no generated practice and blank fields; picking Chemistry or Algebra fills in its starter text.
+  const first = c ? c.pack : 'general', p = metaOf(first).preset;
   CF = c
     ? { id: c.id, pack: c.pack, name: c.name, description: c.description, examLabel: c.examLabel, examDate: c.examDate, err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
-    : { id: null, pack: CQ.meta[0].id, name: p.name, description: p.description, examLabel: p.examLabel, examDate: p.examDate, err: '', preset: p };
+    : { id: null, pack: first, name: p.name, description: p.description, examLabel: p.examLabel, examDate: p.examDate, err: '', preset: p };
   delClassArmed = false;
   renderClassForm();
 }
@@ -123,7 +124,7 @@ async function enterClass(c) {
     SKILLS.length = 0; SKILLS.push(...PACK.skills);
     ASK.turns = []; ASK.key = '';
     delete DASH[c.id]; dashTried.delete(c.id); // its progress will have changed by the time we come back
-    CHAPTERS = []; PROBS = {}; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
+    CHAPTERS = []; PROBS = {}; PLOADED = false; XS.ch.clear(); XS.init = false; ROUTE = null; GV = { id: null, delArmed: false, askSec: null }; DSEL.clear(); SB.adding = false; SB.err = ''; exitExam();
     await loadState();
     await loadDocs();
     await loadGuides();

@@ -370,6 +370,34 @@ function createApp(cfg) {
     if (!made.length) return res.status(400).json({ error: 'No problems to save.' });
     res.status(201).json(made);
   });
+  // The whole class's bank. A problem's chapter is optional: a practice exam covers several, and each question is
+  // filed under the chapter it fits (or none). The chapter routes above are the same rows, filtered.
+  api.get('/classes/:id/problems', (req, res) => {
+    if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
+    res.json(db.prepare('SELECT * FROM problems WHERE class_id = ? ORDER BY created_at, rowid').all(req.params.id).map(problemOut));
+  });
+  api.post('/classes/:id/problems', express.json({ limit: '4mb' }), (req, res) => {
+    if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
+    const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body]).slice(0, 200);
+    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const made = [];
+    for (const p of list) {
+      const text = clip(p && p.text, 4000);
+      if (!text) continue;
+      const id = newId();
+      ins.run(id, req.params.id, chapterOf(req.params.id, p.chapterId), clip(p.sourceDoc, 40), p.kind === 'similar' ? 'similar' : 'original', text, clip(p.answer, 500),
+        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), Date.now());
+      made.push(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(id)));
+    }
+    if (!made.length) return res.status(400).json({ error: 'No problems to save.' });
+    res.status(201).json(made);
+  });
+  api.patch('/problems/:id', express.json(), (req, res) => {
+    const p = db.prepare('SELECT * FROM problems WHERE id = ?').get(req.params.id);
+    if (!p) return res.status(404).json({ error: 'No such problem.' });
+    if (req.body && req.body.chapterId !== undefined) db.prepare('UPDATE problems SET chapter_id = ? WHERE id = ?').run(chapterOf(p.class_id, req.body.chapterId), p.id);
+    res.json(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(p.id)));
+  });
   api.delete('/problems/:id', (req, res) => {
     const r = db.prepare('DELETE FROM problems WHERE id = ?').run(req.params.id);
     if (!r.changes) return res.status(404).json({ error: 'No such problem.' });

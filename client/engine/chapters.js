@@ -3,7 +3,7 @@
 //   #/class/:id                          overview
 //   #/class/:id/ch/:chId/:tab[/:gid]     a chapter (tab: materials | guide | practice | tutor; chId may be "unsorted")
 //   #/class/:id/guide/:gid               a study guide, shown under its chapter
-//   #/class/:id/docs | hw | sets         all documents, homework, practice sets
+//   #/class/:id/docs | hw | sets | exams         all documents, homework, practice sets
 let CHAPTERS = [];
 let ROUTE = null;      // the route on screen: { cid, view, chId, tab, gid, chapter, realId }
 let TUTOR_CTX = null;  // set while a saved chat panel is on screen: { id, title }
@@ -16,7 +16,7 @@ async function loadChapters() {
   try { CHAPTERS = await api('GET', `/api/classes/${CLASS.id}/chapters`); } catch (e) { if (e.code === 'auth_required') throw e; CHAPTERS = []; }
 }
 const chapterById = (id) => CHAPTERS.find((c) => c.id === id) || null;
-const unsortedCount = () => DOCS.filter((d) => !d.chapterId).length + GUIDES.filter((g) => !g.chapterId).length;
+const unsortedCount = () => DOCS.filter((d) => !d.chapterId && d.tag !== 'exam').length + GUIDES.filter((g) => !g.chapterId).length;
 const chapterOptions = (cur) => `<option value="">Unsorted</option>${CHAPTERS.map((c) => `<option value="${c.id}" ${cur === c.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}`;
 // Recall questions waiting in a chapter (new ones count too).
 const chapterDue = (chId) => GUIDES.filter((g) => inChapter(g, chId)).reduce((n, g) => n + (g.cards.length ? dueCount(g) : 0), 0);
@@ -33,7 +33,7 @@ function parseRoute() {
   const p = (m[2] || '').split('/').filter(Boolean), r = { cid: m[1], view: 'overview' };
   if (p[0] === 'ch' && p[1]) { r.view = 'chapter'; r.chId = p[1]; r.tab = TABS.some((t) => t[0] === p[2]) ? p[2] : 'materials'; r.gid = p[2] === 'guide' ? p[3] : undefined; }
   else if (p[0] === 'guide' && p[1]) { r.view = 'guide'; r.gid = p[1]; }
-  else if (['docs', 'hw', 'sets'].includes(p[0])) r.view = p[0];
+  else if (['docs', 'hw', 'sets', 'exams'].includes(p[0])) r.view = p[0];
   return r;
 }
 // Move to a route in the browser's history, so Back works and the page can be bookmarked.
@@ -71,6 +71,7 @@ function renderRoute(keepScroll) {
     docs: () => shell('docs', docsPageHTML()),
     hw: () => shell('hw', `<h1 class="ptitle">Homework</h1>${mineSection()}`),
     sets: () => shell('sets', practiceSetsHTML()),
+    exams: () => shell('exams', examsHTML()),
   }[r.view];
   pane();
   window.scrollTo(0, keepScroll ? y : 0);
@@ -97,6 +98,7 @@ function sidebarHTML(active) {
     <div class="slabel">Class</div>
     ${a('hw', routeHash('hw'), 'Homework', countPill(openHw))}
     ${SKILLS.length ? a('sets', routeHash('sets'), 'Practice sets') : ''}
+    ${a('exams', routeHash('exams'), 'Practice exams')}
     ${a('docs', routeHash('docs'), 'All documents', countPill(DOCS.length))}
     <div class="sfoot"><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button></div>
   </nav>`;
@@ -107,7 +109,7 @@ function pickerHTML(active) {
     <select class="line" id="cpick" aria-label="Go to">
       ${opt('overview', baseHash(), 'Overview')}
       <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title) + (chapterDue(c.id) ? ` (${chapterDue(c.id)} due)` : ''))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
-      <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
+      <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Practice exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
     </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}</div>`;
 }
 function shell(active, main) {
@@ -216,7 +218,7 @@ async function chapterAct(act) {
     renderRoute(true);
   } else if (act === 'ch-del' && ch && !ch.unsorted) {
     if (!CH.delArmed) { CH.delArmed = true; return renderRoute(true); }
-    try { await api('DELETE', `/api/chapters/${ch.id}`); CHAPTERS = CHAPTERS.filter((c) => c.id !== ch.id); delete PROBS[ch.id]; await loadDocs(); await loadGuides(); await loadChapters(); } catch (e) { DU.err = e.message; }
+    try { await api('DELETE', `/api/chapters/${ch.id}`); CHAPTERS = CHAPTERS.filter((c) => c.id !== ch.id); PLOADED = false; await loadDocs(); await loadGuides(); await loadChapters(); } catch (e) { DU.err = e.message; }
     CH.delArmed = false; go(baseHash());
   }
 }

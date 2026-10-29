@@ -21,18 +21,27 @@ function bankProblem(id) {
     set doneDay(v) { bankRec(p.id).doneDay = v; },
   };
 }
+// The class's whole bank is read at once and filed by chapter ('none' holds problems no chapter claims).
+let PLOADED = false;
 async function loadProblems(chId) {
-  PROBS[chId] = await api('GET', `/api/chapters/${chId}/problems`);
-  return PROBS[chId];
+  const all = await api('GET', `/api/classes/${CLASS.id}/problems`);
+  PROBS = Object.fromEntries(CHAPTERS.map((c) => [c.id, []]));
+  PROBS.none = [];
+  all.forEach((p) => (PROBS[p.chapterId && PROBS[p.chapterId] ? p.chapterId : 'none'] || (PROBS.none)).push(p));
+  PLOADED = true;
+  return PROBS[chId || 'none'] || [];
 }
-// Load a chapter's problems the first time its Practice tab is shown, then redraw that tab.
-function ensureProblems(chId) {
-  if (PROBS[chId] || BK.loading === chId) return;
-  BK.loading = chId;
-  loadProblems(chId).catch(() => { PROBS[chId] = []; }).then(() => { BK.loading = null; paintBank(chId); });
+// Load the bank the first time a page that shows it is opened, then redraw that page.
+function ensureProblems() {
+  if (PLOADED || BK.loading) return;
+  BK.loading = true;
+  loadProblems().catch(() => { PROBS = { none: [] }; PLOADED = true; }).then(() => { BK.loading = false; paintBank(); });
 }
-const onPractice = (chId) => ROUTE && ROUTE.view === 'chapter' && ROUTE.tab === 'practice' && ROUTE.realId === chId;
-const paintBank = (chId) => { if (onPractice(chId)) renderRoute(true); };
+const onPractice = () => ROUTE && ((ROUTE.view === 'chapter' && ROUTE.tab === 'practice') || ROUTE.view === 'exams');
+const paintBank = () => { if (onPractice()) renderRoute(true); };
+const sourceDocs = () => DOCS.filter((d) => d.chars);
+// Source documents that have problems in the bank, for choosing what a practice exam draws from.
+const docsWithProblems = () => sourceDocs().filter((d) => allProblems().some((p) => p.sourceDoc === d.id));
 
 // ---- the Practice tab ----
 function practiceTab(ch) {
@@ -42,11 +51,11 @@ function practiceTab(ch) {
       <small>${plural(cards, 'question')} from this chapter’s study guide, brought back on a spaced schedule.</small>`
     : `<small>Make a study guide on the <a href="${chHash(ch.id, 'guide')}">Guide tab</a> to get recall questions.</small>`}</section>`;
   if (ch.unsorted) return `${recall}<section class="zone"><h3>Problems</h3><small>Move materials into a chapter to build a problem bank from them.</small></section>`;
-  ensureProblems(ch.id);
-  const list = PROBS[ch.id];
+  ensureProblems();
+  const list = PLOADED ? PROBS[ch.id] || [] : null;
   if (!list) return `${recall}<section class="zone"><h3>Problems</h3><small>Loading…</small></section>`;
   const originals = list.filter((p) => p.kind === 'original'), made = list.length - originals.length;
-  const bankable = DOCS.filter((d) => d.chapterId === ch.id && d.chars && (d.tag === 'exam' || d.tag === 'textbook'));
+  const bankable = DOCS.filter((d) => d.chapterId === ch.id && d.chars);
   const off = BK.busy ? 'disabled' : '';
   const row = (p) => {
     const st = (bankGet(p.id) || {}).status || 'todo', tries = (bankGet(p.id) || {}).tries;
@@ -65,55 +74,102 @@ function practiceTab(ch) {
   <section class="zone"><h3>Problems${list.length ? ` &middot; ${originals.length} from your materials${made ? `, ${made} AI-made` : ''}` : ''}</h3>
     <div class="row2">
       ${bankable.length ? `<button class="btn ${list.length ? 'alt' : ''}" data-act="b-build" ${off}>Build problem bank</button>` : ''}
+      ${bankable.length && smp ? `<button class="btn alt" data-act="b-gen" ${off}>Write new problems from my materials</button>` : ''}
       ${originals.length && smp ? `<button class="btn alt" data-act="b-similar-all" ${off}>Make similar problems</button>` : ''}
       ${BK.busy ? '<button class="link" data-act="b-stop">Stop</button>' : ''}</div>
     ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
     ${list.length ? `<div class="mine plist">${list.map(row).join('')}</div>${made ? '<small>AI-made problems come with an answer the AI worked out, which can be wrong. The checker treats it as a hint, not a verdict.</small>' : ''}${exam}`
-      : `<div class="empty"><p>No problems yet.</p>${bankable.length ? '<small>Use “Build problem bank” to pull the problems out of your practice exams and textbook pages.</small>'
-        : `<small>Mark an upload as a <b>Practice exam</b> or <b>Textbook</b> on the <a href="${chHash(ch.id, 'materials')}">Materials tab</a>, then build the bank from it.</small>`}</div>`}
+      : `<div class="empty"><p>No problems yet.</p>${bankable.length ? '<small>“Build problem bank” copies the problems out of your uploads and writes new ones when there are none. “Write new problems from my materials” makes fresh ones from your notes and reading.</small>'
+        : `<small>Upload this chapter’s notes, reading, or a past exam on the <a href="${chHash(ch.id, 'materials')}">Materials tab</a>. Practice is built from what you upload.</small>`}</div>`}
   </section>`;
 }
 
 // ---- building ----
-function bankBegin(chId) {
+// where: a chapter id when started from a chapter's Practice tab, else null (the class-level Practice exams page).
+function bankBegin(where) {
   BK.busy = true; BK.err = ''; BK.msg = ''; BK.ctl = new AbortController(); BK.note = 'Starting…';
-  if (!onPractice(chId)) go(chHash(chId, 'practice')); else paintBank(chId);
+  if (!onPractice()) go(where ? chHash(where, 'practice') : routeHash('exams')); else paintBank();
 }
-function bankEnd(chId, msg, e) {
+function bankEnd(msg, e) {
   BK.busy = false; BK.msg = msg || ''; BK.err = e && e.code !== 'cancelled' ? mineErr(e) : '';
-  loadChapters().then(() => paintBank(chId));
-  paintBank(chId);
+  loadChapters().then(() => paintBank());
+  paintBank();
 }
-const bankWait = (chId, what) => (s) => { BK.note = `Waiting for the AI quota (${s}s)…`; paintBank(chId); };
+const bankWait = () => (s) => { BK.note = `Waiting for the AI quota (${s}s)…`; paintBank(); };
+const bankHome = (where) => go(where ? chHash(where, 'practice') : routeHash('exams'));
 
-async function bankBuild(docs, chId) {
+// Read problems out of documents. A document that sits in a chapter and isn't an exam gives that chapter its problems;
+// an exam (or a document with no chapter) is read as covering several chapters, and each problem is filed by the AI.
+async function bankBuild(docs, where) {
   if (BK.busy) return;
-  if (!smp) { BK.err = 'Building a problem bank needs the AI, which isn’t set up on this server.'; return go(chHash(chId, 'practice')); }
-  if (docs.some((d) => d.kind === 'image') && !(smpLimits && smpLimits.images)) { BK.err = 'Reading photos needs a vision model. Upload a PDF or text version instead.'; return go(chHash(chId, 'practice')); }
-  bankBegin(chId);
-  if (!PROBS[chId]) await loadProblems(chId).catch(() => { PROBS[chId] = []; });
-  const seen = new Set(PROBS[chId].map((p) => normText(p.text)));
+  if (!smp) { BK.err = 'Building a problem bank needs the AI, which isn’t set up on this server.'; return bankHome(where); }
+  if (docs.some((d) => d.kind === 'image') && !(smpLimits && smpLimits.images)) { BK.err = 'Reading photos needs a vision model. Upload a PDF or text version instead.'; return bankHome(where); }
+  bankBegin(where);
+  if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
+  const seen = new Set(allProblems().map((p) => normText(p.text)));
   let added = 0, cut = false;
   try {
     for (const d of docs) {
+      const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
       const parts = await docParts([d]);
       cut = cut || parts.length > MAX_PARTS;
       const found = [];
       let topic = '';
       for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && found.length < 60; i++) {
-        BK.note = `Reading ${d.name}${parts.length > 1 ? ` (part ${i + 1} of ${Math.min(parts.length, MAX_PARTS)})` : ''}…`; paintBank(chId);
-        const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null', withAnswers: true, source: d.tag === 'exam' ? 'a past practice exam' : 'textbook pages' }), BK.ctl, bankWait(chId), 3000);
+        BK.note = `Reading ${d.name}${parts.length > 1 ? ` (part ${i + 1} of ${Math.min(parts.length, MAX_PARTS)})` : ''}…`; paintBank();
+        const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
+        const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
         topic = topic || String((r && r.topic) || '').slice(0, 80);
         (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
-          const text = String((p && p.text) || '').trim(), k = normText(text);
-          if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: String((p && p.answer) || '').trim().slice(0, 500), topic, sourceDoc: d.id }); }
+          const text = String((p && p.text) || '').trim(), k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
+          if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: String((p && p.answer) || '').trim().slice(0, 500), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
         });
       }
-      if (found.length) { await api('POST', `/api/chapters/${chId}/problems`, { problems: found.slice(0, 60) }); added += Math.min(found.length, 60); }
+      if (found.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: found.slice(0, 60) }); added += Math.min(found.length, 60); }
     }
-    await loadProblems(chId);
-    bankEnd(chId, added ? `Added ${plural(added, 'problem')} to the bank.${cut ? ' That was a lot of material, so only the first parts were read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
-  } catch (e) { await loadProblems(chId).catch(() => {}); bankEnd(chId, added ? `Added ${plural(added, 'problem')} before it stopped.` : '', e); }
+    await loadProblems();
+    if (where && !(PROBS[where] || []).length && !BK.ctl.signal.aborted) return bankGenerate(where, true);
+    bankEnd(added ? `Added ${plural(added, 'problem')} to the bank.${cut ? ' That was a lot of material, so only the first parts were read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Added ${plural(added, 'problem')} before it stopped.` : '', e); }
+}
+
+// Write practice problems straight from the chapter's materials, for when they hold no problems to copy (notes, slides,
+// a textbook chapter). Any problems already in the bank set the style. Saved as AI-made.
+async function bankGenerate(chId, cont) {
+  if (!cont) { if (BK.busy || !smp) return; bankBegin(chId); }
+  let added = 0;
+  try {
+    if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
+    const docs = DOCS.filter((d) => d.chapterId === chId && d.chars && d.kind !== 'image');
+    if (!docs.length) throw Object.assign(new Error('There is no readable text in this chapter yet. Upload a PDF, Word file or notes.'), { code: 'none' });
+    const parts = (await docParts(docs)).slice(0, 4), seen = new Set(allProblems().map((p) => normText(p.text)));
+    const style = (PROBS[chId] || []).filter((p) => p.kind === 'original').slice(0, 3).map((p) => p.text).join('\n');
+    for (let i = 0; i < parts.length; i++) {
+      BK.note = parts.length > 1 ? `Writing problems from your materials… (${i + 1} of ${parts.length})` : 'Writing problems from your materials…'; paintBank();
+      const prompt = `${rules()}
+
+Below is part of the student's class material for one chapter of "${CLASS.name}". Write 6 practice problems that test what it teaches, the kind this course would ask on an exam. Use only what the material covers.`
+        + (style ? ` Match the style of these problems from the course:
+${style}
+` : '')
+        + `
+Work each problem out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).
+
+Reply with only this JSON:
+{"topic":"short name of the topic","problems":[{"text":"the problem","answer":"the final answer","steps":["one short step"]}]}
+
+Material:
+${parts[i].text}`;
+      const r = await aiJson(prompt, BK.ctl, bankWait(), 3000), topic = String((r && r.topic) || '').slice(0, 80);
+      const made = (Array.isArray(r && r.problems) ? r.problems : []).slice(0, 6).map((q) => ({
+        kind: 'similar', text: String((q && q.text) || '').trim(), answer: String((q && q.answer) || '').trim(),
+        steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic, sourceDoc: '', chapterId: chId,
+      })).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
+      if (made.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: made }); added += made.length; }
+    }
+    await loadProblems();
+    bankEnd(added ? `Wrote ${plural(added, 'problem')} from your materials.` : 'The AI didn’t write anything usable. Try again.');
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Wrote ${plural(added, 'problem')} before it stopped.` : '', e); }
 }
 
 // n new problems like each original: same type and difficulty, different numbers or wording.
@@ -121,25 +177,25 @@ async function bankSimilar(origs, n, chId) {
   if (BK.busy || !smp) return;
   bankBegin(chId);
   let added = 0;
-  const seen = new Set((PROBS[chId] || []).map((p) => normText(p.text))); // never save a problem the bank already has
+  const seen = new Set(allProblems().map((p) => normText(p.text))); // never save a problem the bank already has
   try {
     for (let i = 0; i < origs.length; i++) {
       const p = origs[i];
-      BK.note = origs.length > 1 ? `Writing similar problems… (${i + 1} of ${origs.length})` : 'Writing similar problems…'; paintBank(chId);
+      BK.note = origs.length > 1 ? `Writing similar problems… (${i + 1} of ${origs.length})` : 'Writing similar problems…'; paintBank();
       const ctx = await classContext(p.text, chId);
       const prompt = `${rules()}${ctx}\n\nWrite ${n} NEW practice problems like the one below: the same type of problem and the same difficulty, but with different numbers, names or wording. Do not copy the original.\n\n`
         + `Original problem:\n${p.text}\n${p.answer ? `Its answer: ${p.answer}\n` : ''}\nWork each new problem out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\n`
         + 'Reply with only this JSON:\n{"problems":[{"text":"the new problem","answer":"the final answer","steps":["one short step","one short step"]}]}';
-      const r = await aiJson(prompt, BK.ctl, bankWait(chId), 3000);
+      const r = await aiJson(prompt, BK.ctl, bankWait(), 3000);
       const made = (Array.isArray(r && r.problems) ? r.problems : []).slice(0, n).map((q) => ({
         kind: 'similar', text: String((q && q.text) || '').trim(), answer: String((q && q.answer) || '').trim(),
-        steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: p.topic, sourceDoc: p.sourceDoc,
+        steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: p.topic, sourceDoc: p.sourceDoc, chapterId: p.chapterId,
       })).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
-      if (made.length) { await api('POST', `/api/chapters/${chId}/problems`, { problems: made }); added += made.length; }
+      if (made.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: made }); added += made.length; }
     }
-    await loadProblems(chId);
-    bankEnd(chId, added ? `Added ${plural(added, 'AI-made problem')}.` : 'The AI didn’t write anything usable. Try again.');
-  } catch (e) { await loadProblems(chId).catch(() => {}); bankEnd(chId, added ? `Added ${plural(added, 'AI-made problem')} before it stopped.` : '', e); }
+    await loadProblems();
+    bankEnd(added ? `Added ${plural(added, 'AI-made problem')}.` : 'The AI didn’t write anything usable. Try again.');
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd(added ? `Added ${plural(added, 'AI-made problem')} before it stopped.` : '', e); }
 }
 
 async function bankAct(act, t) {
@@ -147,18 +203,23 @@ async function bankAct(act, t) {
   if (act !== 'b-del') BK.delId = null;
   if (act === 'b-open') return openProblem(id, 'bank', t.dataset.ch);
   if (act === 'b-build') {
-    const docs = id ? DOCS.filter((d) => d.id === id) : DOCS.filter((d) => d.chapterId === chId && d.chars && (d.tag === 'exam' || d.tag === 'textbook'));
-    return bankBuild(docs, id ? (docs[0] || {}).chapterId : chId);
+    const docs = id ? DOCS.filter((d) => d.id === id) : DOCS.filter((d) => d.chapterId === chId && d.chars);
+    return bankBuild(docs, ROUTE && ROUTE.view === 'chapter' ? ROUTE.realId : null);
   }
+  if (act === 'b-gen') return bankGenerate(chId);
   if (act === 'b-similar') { const p = (PROBS[chId] || []).find((x) => x.id === id); return p && bankSimilar([p], 3, chId); }
   if (act === 'b-similar-all') return bankSimilar((PROBS[chId] || []).filter((p) => p.kind === 'original').slice(0, 10), 2, chId);
   if (act === 'b-stop') { if (BK.ctl) BK.ctl.abort(); return; }
   if (act === 'b-del') {
     if (BK.delId !== id) { BK.delId = id; return renderRoute(true); }
-    try { await api('DELETE', `/api/problems/${id}`); PROBS[chId] = (PROBS[chId] || []).filter((p) => p.id !== id); delete (S.bank || {})[id]; await loadChapters(); } catch (e) { BK.err = e.message; }
+    try { await api('DELETE', `/api/problems/${id}`); Object.keys(PROBS).forEach((k) => { PROBS[k] = PROBS[k].filter((p) => p.id !== id); }); delete (S.bank || {})[id]; await loadChapters(); } catch (e) { BK.err = e.message; }
     BK.delId = null; return renderRoute(true);
   }
   if (act === 'b-exam') return exStart(t.dataset.ch);
+  if (act === 'b-exdoc') return exStart(null, id);
+  if (act === 'b-exmix') return exStart();
+  if (act === 'b-xch') { if (XS.ch.has(id)) XS.ch.delete(id); else XS.ch.add(id); return renderRoute(true); }
+  if (act === 'b-xorig') { XS.orig = !XS.orig; return renderRoute(true); }
   if (act === 'b-exsubmit') return exSubmit();
   if (act === 'b-exleave') { exitExam(); return renderHome(); }
   if (act === 'b-exopen') { const x = EX.items[+t.dataset.i], work = EX.answers[+t.dataset.i], ch = EX.chId; exitExam(); openProblem(x.id, 'bank', ch); W.work = work; return renderWork(); }
@@ -166,13 +227,22 @@ async function bankAct(act, t) {
 
 // ---- practice exam: a timed set from the chapter's originals and AI-made problems ----
 function exitExam() { if (EX) { clearInterval(EX.timer); EX = null; } }
-function exStart(chId) {
-  const list = PROBS[chId] || [];
-  const n = Math.min(+(document.getElementById('exn') || {}).value || 10, list.length), min = +(document.getElementById('ext') || {}).value || 30;
+// A chapter's own problems, one uploaded exam's questions in their order, or a mix drawn from the chapters ticked on the
+// Practice exams page.
+const XS = { ch: new Set(), init: false, orig: false };
+function examPool(chId, docId) {
+  if (docId) { const d = DOCS.find((x) => x.id === docId); return { list: allProblems().filter((p) => p.sourceDoc === docId && p.kind === 'original'), label: d ? d.name : 'Practice exam', ordered: true }; }
+  if (chId) return { list: PROBS[chId] || [], label: (chapterById(chId) || {}).title || 'Practice exam' };
+  const all = [...CHAPTERS.map((c) => c.id), 'none'], on = all.filter((k) => XS.ch.has(k));
+  return { list: allProblems().filter((p) => XS.ch.has(p.chapterId && PROBS[p.chapterId] ? p.chapterId : 'none') && (!XS.orig || p.kind === 'original')), label: on.length === all.length ? 'All chapters' : plural(on.length, 'chapter') };
+}
+function exStart(chId, docId) {
+  const { list, label, ordered } = examPool(chId, docId);
+  const n = ordered ? list.length : Math.min(+(document.getElementById('exn') || {}).value || 10, list.length), min = +(document.getElementById('ext') || {}).value || (ordered ? 60 : 30);
   if (n < 1) return;
-  const items = shuffle(list).slice(0, n);
+  const items = ordered ? list : shuffle(list).slice(0, n);
   round = null; Q = null; W.id = null; closeRef();
-  EX = { chId, items, answers: items.map(() => ''), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
+  EX = { chId: chId || null, label, items, answers: items.map(() => ''), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
   renderExam();
 }
 const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -189,10 +259,9 @@ function exSubmit() {
   renderExam();
 }
 function renderExam() {
-  const ch = chapterById(EX.chId);
   if (!EX.done) {
     app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
-    <div class="prob"><div class="eyebrow">Practice exam${ch ? ' &middot; ' + esc(ch.title) : ''}</div>
+    <div class="prob"><div class="eyebrow">Practice exam &middot; ${esc(EX.label)}</div>
       <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
       ${EX.items.map((p, i) => `<div class="exq"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div><div class="qtext">${fmtMath(p.text)}</div>
         <textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea></div>`).join('')}
@@ -210,11 +279,52 @@ function renderExam() {
       : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' ? ' (written by the AI, so double-check it)' : ''}</p></div>`
       : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' ? ' (written by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
       : '<div class="fb"><p>No answer key for this one.</p></div>';
-    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.kind === 'similar' ? ' &middot; AI-made' : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
+    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
       <div class="where">${mine ? esc(mine) : '(left blank)'}</div>${verdict}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
       <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${PACK.videoWord}`.trim() || CLASS.name, true)}</div></div>`;
   }).join('')}`;
   window.scrollTo(0, 0);
 }
+// ---- the class-level Practice exams page: instructor materials, and exams drawn from any chapters ----
+function examsHTML() {
+  const head = '<h1 class="ptitle">Practice exams</h1>';
+  ensureProblems();
+  if (!PLOADED) return `${head}<small>Loading…</small>`;
+  if (!XS.init) { CHAPTERS.forEach((c) => XS.ch.add(c.id)); XS.ch.add('none'); XS.init = true; }
+  const off = BK.busy ? 'disabled' : '', { list } = examPool(), total = allProblems().length;
+  const sizes = [...new Set([...[5, 10, 15, 20, 30].filter((n) => n < list.length), list.length])], pre = sizes.filter((n) => n <= 10).pop();
+  const count = (id) => (PROBS[id] || []).length;
+  const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
+  const srcRow = (d) => {
+    const n = allProblems().filter((p) => p.sourceDoc === d.id).length;
+    return `<div class="docrow"><div class="dtop"><span class="dk">${KIND_LABEL[d.kind]}</span>${d.tag ? `<span class="dk tag-${d.tag}">${TAG_LABEL[d.tag]}</span>` : ''}<a class="dn" href="/api/docs/${d.id}/file" target="_blank" rel="noopener">${esc(d.name)}</a>
+        <small>${n ? plural(n, 'problem') + ' read' : 'not read yet'}</small></div>
+      <div class="dact">${n ? `<button class="btn alt sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${n ? 'Read again' : 'Read its problems'}</button>` : ''}</div></div>`;
+  };
+  const loose = PROBS.none || [];
+  const srcs = sourceDocs().filter((d) => d.tag === 'exam' || d.tag === 'textbook' || allProblems().some((p) => p.sourceDoc === d.id));
+  return `${head}
+  <p class="lead">Practice exams cover more than one chapter. Upload your instructor’s exams and review materials, let the AI read the questions and file each under its chapter, then build a timed exam from any chapters.</p>
+  <div class="answer"><label class="btn ${DU.busy ? 'alt' : ''}" for="xfile">${DU.busy ? 'Uploading…' : 'Upload a practice exam'}</label><input type="file" id="xfile" multiple accept="${DOC_ACCEPT}" hidden ${DU.busy ? 'disabled' : ''}>
+    <select class="line sm" id="ext" aria-label="Time limit">${[15, 30, 45, 60, 90, 120].map((m) => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${m} minutes</option>`).join('')}</select></div>
+  ${upMsgHTML()}
+  ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p><div class="acts"><button class="link" data-act="b-stop">Stop</button></div></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
+  <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}</section>
+  <section class="zone"><h3>Mixed exam</h3>
+    ${total < 3 ? '<small>Read the problems out of an exam or chapter materials first. There are only ' + total + ' in the bank.</small>' : `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>
+      <label class="chk"><input type="checkbox" data-act="b-xorig" ${XS.orig ? 'checked' : ''}> Only questions from my materials (no AI-made)</label>
+      ${list.length >= 3 ? `<div class="answer"><select class="line sm" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select>
+        <button class="btn" data-act="b-exmix">Start practice exam</button></div>` : '<small>Tick chapters with at least 3 problems between them.</small>'}`}</section>
+  ${loose.length && CHAPTERS.length ? `<section class="zone"><h3>Not filed under a chapter</h3><small>${plural(loose.length, 'problem')} the AI couldn’t place. Pick a chapter for each.</small>
+    <div class="mine plist">${loose.map((p) => `<div class="prow"><button class="mine-item" data-act="b-open" data-id="${p.id}"><span class="mtext">${fmtMath(p.text)}</span></button>
+      <select class="line sm" data-pmove="${p.id}" aria-label="Chapter"><option value="">Choose a chapter</option>${CHAPTERS.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div>`).join('')}</div></section>` : ''}`;
+}
+app.addEventListener('change', async (e) => {
+  const t = e.target;
+  if (t.dataset && t.dataset.pmove && t.matches('select') && t.value) {
+    try { await api('PATCH', `/api/problems/${t.dataset.pmove}`, { chapterId: t.value }); await loadProblems(); await loadChapters(); } catch (err) { BK.err = err.message; }
+    renderRoute(true);
+  }
+});
 app.addEventListener('input', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exa !== undefined) EX.answers[+t.dataset.exa] = t.value; });

@@ -275,6 +275,25 @@ test('problems: saved per chapter, validated, deleted one by one', async () => {
   assert.strictEqual((await call('GET', `/api/chapters/${ch.id}/problems`)).data.length, 1);
 });
 
+test('problems: a class bank files each problem under its own chapter, or none, and can be refiled', async () => {
+  const cls = (await call('POST', '/api/classes', { name: 'Exam class', pack: 'general' })).data;
+  const other = (await call('POST', '/api/classes', { name: 'Other class', pack: 'general' })).data;
+  const c1 = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Ch 1' })).data;
+  const c2 = (await call('POST', `/api/classes/${cls.id}/chapters`, { title: 'Ch 2' })).data;
+  const foreign = (await call('POST', `/api/classes/${other.id}/chapters`, { title: 'Elsewhere' })).data;
+  const made = (await call('POST', `/api/classes/${cls.id}/problems`, { problems: [
+    { text: 'Q1', chapterId: c1.id, sourceDoc: 'exam1' }, { text: 'Q2', chapterId: c2.id, sourceDoc: 'exam1' },
+    { text: 'Q3', sourceDoc: 'exam1' }, { text: 'Q4', chapterId: foreign.id },
+  ] })).data;
+  assert.deepStrictEqual(made.map((p) => p.chapterId), [c1.id, c2.id, null, null]); // a chapter of another class is ignored
+  assert.strictEqual((await call('GET', `/api/classes/${cls.id}/problems`)).data.length, 4);
+  assert.strictEqual((await call('GET', `/api/chapters/${c1.id}/problems`)).data.length, 1);
+  assert.strictEqual((await call('PATCH', `/api/problems/${made[2].id}`, { chapterId: c2.id })).data.chapterId, c2.id);
+  assert.strictEqual((await call('GET', `/api/chapters/${c2.id}/problems`)).data.length, 2);
+  assert.strictEqual((await call('PATCH', `/api/problems/${made[2].id}`, { chapterId: foreign.id })).data.chapterId, null);
+  assert.strictEqual((await call('GET', '/api/classes/nope/problems')).res.status, 404);
+});
+
 test('videos: falls back without a key, then serves from the cache and from a live search', async () => {
   assert.strictEqual((await call('GET', '/api/videos')).res.status, 400);
   assert.deepStrictEqual((await call('GET', '/api/videos?q=factoring')).data, { videos: [], fallback: true });

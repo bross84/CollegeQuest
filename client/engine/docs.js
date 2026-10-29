@@ -27,7 +27,7 @@ const tagOptions = (cur) => Object.entries(TAG_LABEL).map(([k, l]) => `<option v
 
 // One uploaded document: open it, tag it, move it, and the things you can make from it.
 function docRowHTML(d, bulk) {
-  const canBank = d.chars && d.chapterId && (d.tag === 'exam' || d.tag === 'textbook');
+  const canBank = !!d.chars;
   return `<div class="docrow">
       <div class="dtop">${bulk ? `<input type="checkbox" data-act="d-sel" data-id="${d.id}" aria-label="Select ${esc(d.name)}" ${DSEL.has(d.id) ? 'checked' : ''}>` : ''}
         <span class="dk">${KIND_LABEL[d.kind]}</span>${d.tag ? `<span class="dk tag-${d.tag}">${TAG_LABEL[d.tag]}</span>` : ''}
@@ -37,7 +37,7 @@ function docRowHTML(d, bulk) {
       <div class="dact">
         <select class="line sm" data-dtag="${d.id}" aria-label="Kind of material">${tagOptions(d.tag)}</select>
         <select class="line sm" data-dmove="${d.id}" aria-label="Chapter">${chapterOptions(d.chapterId)}</select>
-        ${canBank ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${BK.busy ? 'disabled' : ''}>${PROBS[d.chapterId] && PROBS[d.chapterId].some((p) => p.sourceDoc === d.id) ? 'Rebuild problem bank' : 'Build problem bank'}</button>` : ''}
+        ${canBank ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${BK.busy ? 'disabled' : ''}>${allProblems().some((p) => p.sourceDoc === d.id) ? 'Read problems again' : 'Read its problems'}</button>` : ''}
         ${d.chars ? `<button class="link" data-act="g-new" data-id="${d.id}">Study guide</button>` : ''}
         ${d.kind === 'image' || d.chars ? `<button class="link" data-act="u-open" data-id="${d.id}">Find problems</button>` : ''}
         ${d.chars ? `<label class="chk"><input type="checkbox" data-act="d-ctx" data-id="${d.id}" ${d.useContext ? 'checked' : ''}> Tutor can use this</label>` : ''}
@@ -49,7 +49,7 @@ const pasteNoteHTML = (open) => `<details class="paste" ${open ? 'open' : ''}><s
     <input class="line" id="dnote-name" type="text" maxlength="120" placeholder="Name, e.g. Ch. 3 notes" value="${esc(DU.name)}">
     <textarea id="dnote" rows="4" placeholder="Paste notes, a worksheet or problems here">${esc(DU.text)}</textarea>
     <div class="answer"><button class="btn alt" data-act="d-note">Save note</button></div></details>`;
-const upMsgHTML = () => `${DU.msg ? `<div class="fb good" role="status"><p>${esc(DU.msg)}</p>${DU.offer.map((id) => { const d = DOCS.find((x) => x.id === id); return d ? `<div class="acts"><button class="btn sm" data-act="b-build" data-id="${d.id}">Build problem bank from ${esc(d.name)}</button></div>` : ''; }).join('')}</div>` : ''}${DU.err ? `<div class="fb no" role="status"><p>${esc(DU.err)}</p></div>` : ''}`;
+const upMsgHTML = () => `${DU.msg ? `<div class="fb good" role="status"><p>${esc(DU.msg)}</p>${DU.offer.map((id) => { const d = DOCS.find((x) => x.id === id); return d ? `<div class="acts"><button class="btn sm" data-act="b-build" data-id="${d.id}">Read the problems in ${esc(d.name)}</button></div>` : ''; }).join('')}</div>` : ''}${DU.err ? `<div class="fb no" role="status"><p>${esc(DU.err)}</p></div>` : ''}`;
 
 // "All documents": every upload in the class, whatever its chapter, with a bulk move.
 function docsPageHTML() {
@@ -94,8 +94,8 @@ async function handleUploads(files, opts) {
   try {
     const made = await uploadFiles(files, opts);
     DU.msg = `Added ${plural(made.length, 'file')}.`;
-    DU.offer = made.filter((d) => d.chars && d.chapterId && (d.tag === 'exam' || d.tag === 'textbook')).map((d) => d.id);
-    if (opts && opts.chapterId && !(opts.tag)) DU.msg += ' Mark practice exams and textbook pages with their kind to build problems from them.';
+    DU.offer = made.filter((d) => d.chars && (d.tag === 'exam' || d.tag === 'textbook' || d.chapterId)).map((d) => d.id);
+    if (opts && opts.chapterId && !(opts.tag)) DU.msg += '';
     await loadChapters();
   }
   catch (e) { DU.err = e.message; if (e.made) DU.msg = `Added ${plural(e.made.length, 'file')}.`; }
@@ -135,7 +135,7 @@ async function docAct(act, t) {
 }
 app.addEventListener('change', async (e) => {
   const t = e.target;
-  if ((t.id === 'dfile' || t.id === 'dcam') && t.files && t.files.length) { const files = [...t.files]; t.value = ''; handleUploads(files); }
+  if ((t.id === 'dfile' || t.id === 'dcam' || t.id === 'xfile') && t.files && t.files.length) { const files = [...t.files]; t.value = ''; handleUploads(files, t.id === 'xfile' ? { tag: 'exam' } : undefined); }
   else if (t.dataset && t.dataset.dtag !== undefined && t.matches('select')) { try { await patchDoc(t.dataset.dtag, { tag: t.value }); } catch (err) { DU.err = err.message; } refreshDocs(); }
   else if (t.dataset && t.dataset.dmove !== undefined && t.matches('select')) {
     try { await patchDoc(t.dataset.dmove, { chapterId: t.value || null }); await loadChapters(); } catch (err) { DU.err = err.message; }

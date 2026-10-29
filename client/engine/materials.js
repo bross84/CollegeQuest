@@ -34,11 +34,12 @@ async function docParts(picked, pasted) {
   return parts;
 }
 // The prompt that lists the problems in one part. withAnswers also copies any answer key found in the material.
-function findPrompt(part, { skillHint, withAnswers, source }) {
+function findPrompt(part, { skillHint, withAnswers, source, chapters }) {
   return `You are helping an adult student who is taking "${CLASS.name}". Below are photos and/or text from their class materials (${source || 'a worksheet, textbook pages, or notes'}). `
     + 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
     + `Transcribe each problem as plain text: ${PACK.finder}. Do NOT solve anything.${withAnswers ? ' If the material has an answer key or solutions, copy the final answer for each problem into "answer"; leave "answer" empty when there is none. Never work out an answer yourself.' : ''}\n\n`
     + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[{${['"text":"the problem"', withAnswers && '"answer":""', skillHint].filter(Boolean).join(',')}}]}\n\n`
+    + (chapters && chapters.length ? `This material may cover several chapters, so give each problem its own "chapter": the number of the chapter it belongs to from the list below, or 0 if none fits.\n${chapters.map((c, i) => `${i + 1}. ${c.title}`).join('\n')}\n\n` : '')
     + (part.text ? `Text:\n${part.text}` : '(no text, see the photos)');
 }
 function syncU() {
