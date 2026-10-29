@@ -46,6 +46,8 @@ function createApp(cfg) {
   api.use(auth.middleware);
 
   // ---- AI ----
+  api.get('/ai/usage', (req, res) => res.json(ai.usage()));
+  api.post('/ai/usage', async (req, res) => res.json(await ai.probe()));
   api.get('/ai/status', (req, res) => res.json({ ...ai.status(), videos: !!youtubeKey() }));
 
   // ---- settings (keys are never sent back in full) ----

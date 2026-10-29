@@ -100,6 +100,7 @@ function sidebarHTML(active) {
     ${SKILLS.length ? a('sets', routeHash('sets'), 'Practice sets') : ''}
     ${a('exams', routeHash('exams'), 'Practice exams')}
     ${a('docs', routeHash('docs'), 'All documents', countPill(DOCS.length))}
+    ${usageHTML()}
     <div class="sfoot"><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button></div>
   </nav>`;
 }
@@ -110,7 +111,7 @@ function pickerHTML(active) {
       ${opt('overview', baseHash(), 'Overview')}
       <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title) + (chapterDue(c.id) ? ` (${chapterDue(c.id)} due)` : ''))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
       <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Practice exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
-    </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}</div>`;
+    </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}${usageHTML()}</div>`;
 }
 function shell(active, main) {
   app.innerHTML = `<div class="shell">${pickerHTML(active)}${sidebarHTML(active)}<main class="pane">${main}</main></div>`;

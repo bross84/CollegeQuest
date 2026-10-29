@@ -498,3 +498,14 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .xrow .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .xrow select.line { width: 100%; min-height: 42px; padding: 8px 12px; font-size: 1rem; }
 .quick { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.aiuse { margin: 18px 10px 0; display: flex; flex-direction: column; gap: 6px; font-size: .82rem; color: var(--muted); }
+.aiuse .utitle { font-weight: 600; color: var(--ink); }
+.aiuse .urow { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline; }
+.aiuse .urow b { font-weight: 600; color: var(--ink); }
+.aiuse .urow i { grid-column: 1 / -1; display: block; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 10%, transparent); overflow: hidden; }
+.aiuse .urow s { display: block; height: 100%; background: var(--accent); text-decoration: none; }
+.aiuse .urow.hot s { background: #c2410c; }
+.aiuse .urow.hot b { color: #c2410c; }
+.picker .aiuse { flex-direction: row; gap: 14px; margin: 10px 0 0; }
+.picker .aiuse .utitle { display: none; }
+.picker .aiuse .urow { flex: 1; }

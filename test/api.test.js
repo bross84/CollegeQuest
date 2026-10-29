@@ -23,7 +23,7 @@ before(async () => {
     req.on('end', () => {
       const j = JSON.parse(b);
       mockHits.push(j.model);
-      if (j.model === 'bad') { res.writeHead(429, { 'Content-Type': 'application/json' }); return res.end('{"error":{"message":"slow down"}}'); }
+      if (j.model === 'bad') { res.writeHead(429, { 'Content-Type': 'application/json', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '250', 'x-ratelimit-limit-tokens': '12000', 'x-ratelimit-remaining-tokens': '0', 'x-ratelimit-reset-tokens': '6s' }); return res.end('{"error":{"message":"slow down"}}'); }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { content: '<think>x</think>answer from ' + j.model } }] }));
     });
@@ -130,6 +130,9 @@ test('ai: falls back to the next provider and strips reasoning', async () => {
   assert.deepStrictEqual(mockHits, ['bad', 'good']);
   assert.strictEqual((await call('POST', '/api/ai', { messages: [] })).res.status, 400);
   assert.deepStrictEqual((await call('GET', '/api/ai/status')).data.providers, ['groq', 'openrouter']);
+  const used = (await call('GET', '/api/ai/usage')).data;
+  assert.strictEqual(used.length, 1, 'only a provider that reports its limits is listed');
+  assert.deepStrictEqual([used[0].provider, used[0].limitRequests, used[0].remainingRequests, used[0].remainingTokens, used[0].resetTokens], ['groq', 1000, 250, 0, '6s']);
 });
 
 test('think filter drops reasoning even when tags are split across chunks', () => {

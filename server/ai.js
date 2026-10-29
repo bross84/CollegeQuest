@@ -42,6 +42,16 @@ function createAi(cfg, getAi) {
     };
   }
 
+  // Groq reports its limits on every response: requests are per day, tokens per minute. Keep the latest reading per model.
+  const usage = {};
+  function noteUsage(name, model, res) {
+    const num = (k) => { const v = res.headers.get(k); return v !== null && v !== '' && !Number.isNaN(+v) ? +v : null; };
+    const u = { provider: name, model, at: Date.now(), limitRequests: num('x-ratelimit-limit-requests'), remainingRequests: num('x-ratelimit-remaining-requests'),
+      limitTokens: num('x-ratelimit-limit-tokens'), remainingTokens: num('x-ratelimit-remaining-tokens'),
+      resetRequests: res.headers.get('x-ratelimit-reset-requests'), resetTokens: res.headers.get('x-ratelimit-reset-tokens') };
+    if (u.limitRequests !== null || u.limitTokens !== null) usage[`${name}|${model}`] = u;
+  }
+
   function classify(res, body) {
     const msg = (body && (body.error && (body.error.message || body.error))) || res.statusText || 'AI request failed';
     const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
@@ -80,6 +90,7 @@ function createAi(cfg, getAi) {
         if (ctl.signal.aborted && ctl.signal.reason) throw ctl.signal.reason;
         throw new AiError('ai_error', `Could not reach ${name}: ${e.message}`, 502);
       }
+      noteUsage(name, model, res);
       if (!res.ok) throw classify(res, await res.json().catch(() => null));
       if (!stream) {
         const j = await res.json();
@@ -138,7 +149,13 @@ function createAi(cfg, getAi) {
     throw last;
   }
 
-  return { status, chat };
+  // A one-token request to each provider, so the limits are known before the first real call (it counts as one request).
+  async function probe() {
+    for (const n of active()) { try { await callProvider(n, { messages: [{ role: 'user', content: 'Say ok.' }], images: [], maxTokens: 1 }); } catch (e) { /* a refusal still carries the headers */ } }
+    return Object.values(usage);
+  }
+
+  return { status, chat, probe, usage: () => Object.values(usage) };
 }
 
 module.exports = { createAi, AiError, createThinkFilter };

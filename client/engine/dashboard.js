@@ -57,6 +57,7 @@ function dashMenuHTML() {
     <button class="sl on" aria-current="page"><span>Dashboard</span></button>
     <div class="slabel">Classes</div>${items || '<small class="muted sl">No classes yet</small>'}
     <button class="sl add" data-act="c-new">+ Add a class</button>
+    ${usageHTML()}
     <div class="sfoot"><button class="link" data-act="c-settings">AI settings</button>${AUTH.required ? ' <button class="link" data-act="c-logout">Sign out</button>' : ''}</div></nav>`;
 }
 
@@ -89,7 +90,7 @@ function renderClasses(keepScroll) {
     ? `<div class="dgrid">${CLASSES.map(dashCardHTML).join('')}</div>`
     : '<div class="empty"><p>Each class is its own space, with its own chapters, practice, homework and documents. Start with one.</p><button class="btn big" data-act="c-new">Add a class</button></div>';
   app.innerHTML = `<div class="shell">
-    <div class="picker"><div class="prow1"><b class="pname">College Quest</b><button class="link" data-act="c-settings">AI settings</button></div><button class="btn alt sm" data-act="c-new">+ Add a class</button></div>
+    <div class="picker"><div class="prow1"><b class="pname">College Quest</b><button class="link" data-act="c-settings">AI settings</button></div><button class="btn alt sm" data-act="c-new">+ Add a class</button>${usageHTML()}</div>
     ${dashMenuHTML()}
     <main class="pane"><h1 class="ptitle">Dashboard</h1>${totals}${main}<div class="foot"><small>${esc(aiLine())}</small></div></main></div>`;
   window.scrollTo(0, keepScroll ? y : 0);

@@ -63,6 +63,9 @@ function parseJsonLoose(t) {
 
 function makeSmp() {
   async function run(input, opts = {}) {
+    try { return await runRaw(input, opts); } finally { usageSoon(); }
+  }
+  async function runRaw(input, opts = {}) {
     const body = { messages: typeof input === 'string' ? [{ role: 'user', content: input }] : input, quick: opts.modelTier === 'quick', stream: !!opts.onText, maxTokens: opts.maxTokens };
     if (opts.images) body.images = await prepImages(opts.images);
     let text = '';
@@ -107,4 +110,32 @@ async function initAI() {
   try { aiStatus = await api('GET', '/api/ai/status'); } catch (e) { aiStatus = { configured: false, providers: [], images: false }; }
   smp = aiStatus.configured ? makeSmp() : null;
   smpLimits = smp ? await smp.limits() : null;
+  refreshUsage(false);
 }
+
+// ---- AI usage, shown in the sidebar ----
+// Groq reports its limits with every answer: requests per day and tokens per minute. The server keeps the latest reading per model.
+let AIU = [], aiuProbed = false, aiuTimer = null;
+async function refreshUsage(probe) {
+  if (!aiStatus.configured) return;
+  try { AIU = await api(probe ? 'POST' : 'GET', '/api/ai/usage'); } catch (e) { return; }
+  if (!AIU.length && !aiuProbed && !probe) { aiuProbed = true; return refreshUsage(true); } // nothing measured yet: one tiny request to learn the limits
+  paintUsage();
+}
+const usageSoon = () => { clearTimeout(aiuTimer); aiuTimer = setTimeout(() => refreshUsage(false), 1500); };
+function usageInner() {
+  if (!aiStatus.configured) return '';
+  if (!AIU.length) return `<small>${aiStatus.providers.includes('groq') ? 'AI usage: measuring…' : 'AI usage isn’t reported by OpenRouter.'}</small>`;
+  const row = (label, left, limit, reset) => {
+    const pct = Math.max(0, Math.min(100, Math.round(((limit - left) / limit) * 100)));
+    return `<div class="urow ${pct >= 80 ? 'hot' : ''}" title="${(limit - left).toLocaleString()} of ${limit.toLocaleString()} used${reset ? ', resets in ' + esc(reset) : ''}"><span>${label}</span><b>${pct}%</b><i><s style="width:${pct}%"></s></i></div>`;
+  };
+  const u = AIU.slice().sort((a, b) => b.at - a.at)[0];
+  return `<div class="utitle">AI usage &middot; ${esc(PROVIDER_LABEL[u.provider] || u.provider)}</div>`
+    + (u.limitRequests !== null && u.remainingRequests !== null ? row('Requests today', u.remainingRequests, u.limitRequests, u.resetRequests) : '')
+    + (u.limitTokens !== null && u.remainingTokens !== null ? row('Tokens this minute', u.remainingTokens, u.limitTokens, u.resetTokens) : '');
+}
+const usageHTML = () => `<div class="aiuse">${usageInner()}</div>`;
+function paintUsage() { document.querySelectorAll('.aiuse').forEach((el) => { el.innerHTML = usageInner(); }); }
+setInterval(() => { if (!document.hidden) refreshUsage(false); }, 60000);
+
