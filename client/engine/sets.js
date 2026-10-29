@@ -135,8 +135,12 @@ function setRowHTML(s) {
 // The chapter's main action on its Practice tab.
 function studyZoneHTML(ch) {
   const mine = SETS.filter((s) => s.kind === 'chapter' && s.chapterIds.includes(ch.id));
+  const hasExam = (PROBS[ch.id] || []).some((p) => srcOf(p) === 'exam');
+  const blurb = hasExam ? 'your instructor’s exam questions first, then problems from the text, then new ones written to match.'
+    : sourceDocs().some((d) => d.tag === 'exam') ? 'none of your instructor’s exam questions are filed under this chapter, so it uses problems from the text, then new ones written to match.'
+      : 'you haven’t uploaded an instructor exam yet, so it uses problems from the text, then new ones written to match. Upload the exam on the <a href="' + routeHash('exams') + '">Practice exams</a> page to include its questions.';
   return `<section class="zone"><h3>Study set</h3>
-    <small>A short set that covers this chapter’s main ideas: your instructor’s exam questions first, then problems from the text, then new ones written to match.</small>
+    <small>A short set that covers this chapter’s main ideas: ${blurb}</small>
     <div class="answer"><select class="line sm" id="ssn" data-ss="csize" aria-label="Size">${sizeOptions(SS.csize)}</select>
       <button class="btn" data-act="b-setbuild" data-ch="${ch.id}" ${BK.busy || !smp ? 'disabled' : ''}>Build study set</button></div>
     ${smp ? '' : '<small class="warn">Needs the AI, which isn’t set up on this server.</small>'}${bkStatusHTML()}
@@ -150,7 +154,7 @@ function examBuilderHTML(list) {
   const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
   const sizes = [...new Set([...[5, 10, 15, 20, 30].filter((n) => n < list.length), list.length])], pre = sizes.filter((n) => n <= 10).pop();
   return `<section class="zone"><h3>Build my exam</h3>
-    <small>Pick the chapters the exam covers. It mixes your instructor’s questions, problems from the text and new ones written to match, and is saved so you can retake or print it.</small>
+    <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one above to include its questions)'}, and is saved so you can retake or print it.</small>
     ${CHAPTERS.length ? `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>` : '<small>Add chapters first (use “+ Add chapter” in the sidebar) so the exam can cover them.</small>'}
     <div class="answer"><select class="line sm" data-ss="tpl" aria-label="Model it on">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
       <select class="line sm" data-ss="mix" aria-label="Mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select>
