@@ -144,16 +144,17 @@ async function startSectionQuiz(gid, i) {
   }
   const unseen = (q) => ((cardRec('p:' + q.id) || {}).box || 0) < 1; // never asked, or missed last time
   const real = secPicks(p).filter(playOpts);
-  let probs = shuffle(real.filter(unseen)).slice(0, 5);
-  if (!probs.length && real.length) probs = shuffle(real).slice(0, 5); // all got right already: go through them again
-  if (real.length < 3 && smp) { // too few of your own questions fit: AI-written ones fill in, and are labelled
+  let probs = shuffle(real.filter(unseen)).slice(0, 5); // your own problems first
+  const allRight = !probs.length && real.length > 0;
+  if ((real.length < 3 || allRight) && smp) { // too few of your own questions fit, or you've got them all right: AI-written ones, labelled
     let have = shuffle(secBank(p).filter(unseen)).slice(0, 5 - probs.length);
     if (probs.length + have.length < 3) {
-      show('Writing problems for this section…', 'Few of your own questions fit this section, so the AI writes some like them.');
+      show('Writing problems for this section…', allRight ? 'You’ve answered every problem from your materials on this section correctly, so the AI writes new ones like them.' : 'Few of your own questions fit this section, so the AI writes some like them.');
       try { have = [...have, ...await writeSectionProblems(p, 5 - probs.length - have.length, (n) => show('Writing problems for this section…', n))]; } catch (e) { problem = problem || mineErr(e); }
     }
     probs = [...probs, ...have];
   }
+  if (!probs.length && real.length) probs = shuffle(real).slice(0, 5); // no new ones could be written: go through yours again
   const pseudo = { id: p.g.id, title: p.g.title, sections: p.g.sections, cards: [] };
   const items = [...probs.map((q) => problemItem(q, p, pseudo)), ...(probs.length < 5 ? shuffle(p.cards).slice(0, 5 - probs.length) : [])];
   if (!items.length) {
@@ -163,6 +164,20 @@ async function startSectionQuiz(gid, i) {
   pseudo.cards = items.map((x) => x.c);
   Q = { guideId: gid, chapterId: p.ch.unsorted ? null : p.ch.id, path: { gid, i }, askOpen: false, items: shuffle(items), i: 0, results: [], extra: false };
   qOpen(); renderQuiz();
+}
+// After a chapter's guide is built, the problems in its textbook files are read into the bank (files already read are skipped,
+// so preparing again adds nothing twice). Progress shows on the builder; a failure here leaves the guide as it is.
+async function readChapterProblems(docs) {
+  if (!PLOADED) await loadProblems().catch(() => {});
+  const unread = docs.filter((d) => d.kind !== 'image' && d.tag !== 'exam' && d.chars && !allProblems().some((q) => q.sourceDoc === d.id));
+  if (!unread.length || BK.busy || !smp) return;
+  BK.busy = true; BK.ctl = GB.ctl || new AbortController(); BK.note = 'Reading the problems in your textbook…';
+  GB.busy = true; GB.note = BK.note; renderBuilder();
+  const tick = setInterval(() => { if (GB.note !== BK.note) { GB.note = BK.note; renderBuilder(); } }, 400);
+  try { await readDocs(unread, { added: 0, cut: false }); unread.forEach((d) => READ_TRIED.add(d.id)); } catch (e) { /* the tiles fall back to AI-written problems */ }
+  clearInterval(tick);
+  BK.busy = false; BK.note = '';
+  await loadProblems().catch(() => {});
 }
 // Reads the chapter's documents into a study guide in one go, then lands on the chapter's sections.
 function prepareChapter(chId) {

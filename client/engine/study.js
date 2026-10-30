@@ -124,7 +124,9 @@ async function gBuild() {
   try {
     const g = await api('POST', `/api/classes/${CLASS.id}/guides`, { chapterId: GB.chapterId, title: GB.title.trim() || (picked.length === 1 ? picked[0].name.replace(/\.[^.]+$/, '') : `${picked[0].name.replace(/\.[^.]+$/, '')} and ${picked.length - 1} more`), docs: picked.map((d) => d.id), sections, cards, note });
     const auto = GB.auto;
-    GUIDES.unshift(g); resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); if (auto) go(chHash(g.chapterId || 'unsorted', 'learn')); else goGuide(g);
+    GUIDES.unshift(g);
+    if (auto) await readChapterProblems(picked); // "Prepare this chapter" also reads the textbook's problems, so its tiles practise real ones
+    resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); if (auto) go(chHash(g.chapterId || 'unsorted', 'learn')); else goGuide(g);
   } catch (e) { GB.err = 'Built it, but saving failed: ' + e.message; renderBuilder(); }
 }
 
