@@ -47,7 +47,15 @@ You may not need to. On first start the database upgrade (v14) re-reads every qu
 5. **Question 16:** your extract (Appendix A) has no letters on the rows, but you said they are labelled a to d. Both forms read as multi-part, and both are tested.
 6. **Ports on this PC:** something from an earlier session was already listening on 3998 and 3999 when I started. I didn't touch it and ran my servers on 3988 and 3989 instead (now stopped). The README's mock-AI command uses 3998/3999, so stop the old ones first if they're still running.
 
-## Open questions (behaviour unchanged, as asked)
+## Open questions: your answers (30 October)
+
+1. Sections: keep every section that has problems to match. No change, since that is how it works now.
+2. Done (`a1a3fb6`): each uploaded exam has a **View** button under Exams. It shows the exam as read, question by question, with the options or parts and the key, and a chapter picker on every question.
+3. Done (`af69bfe`): building a study guide reads the textbook's problems in the same AI call. "Prepare this chapter" now makes one pass instead of two. Exams are still read on the Exams page.
+4. Not decided. The setting only applies to built-in drills, which no subject has any more, so it does nothing today.
+5. Done (`e24e346`): section practice uses your instructor's exam questions first, then textbook problems, then AI-written ones. AI-written problems are also modelled on exam questions first. The exam builder is unchanged.
+
+The original questions:
 
 1. Chapter 3 splits into about 26 sections. Too many? (One option: merge to about 8 to 10 per chapter.)
 2. A per-question chapter picker to re-file a misfiled exam question: not added.
