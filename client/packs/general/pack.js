@@ -3,7 +3,6 @@ return {
   id: 'general',
   skills: SKILLS,
   zones: [],
-  ranks: ['Newcomer', 'Regular', 'Studious', 'Focused', 'Sharp', 'Scholar', 'Expert', 'Top of the class'],
   coreName: '',
   coreTitle: '',
   baseTitle: '',

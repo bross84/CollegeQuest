@@ -1,5 +1,5 @@
 // Game state, storage, scoring, and problem selection. No DOM in here.
-// The class being studied (name, exam, notes) and its subject pack (skills, ranks, wording). Set when a class is opened.
+// The class being studied (name, exam, notes) and its subject pack (skills, wording). Set when a class is opened.
 let PACK = null, CLASS = null;
 const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both', cards: {}, bank: {}, chats: {} });
 let S = fresh();
@@ -13,7 +13,6 @@ const stars = (id) => { const s = (S.skills[id] || {}).score || 0; return s >= 8
 const daysOff = (id) => { const s = S.skills[id]; return s && s.last ? dayDiff(s.last, dayKey()) : 0; };
 const isRusty = (id) => stars(id) > 0 && daysOff(id) >= 5;
 const setDoneToday = () => S.setDay === dayKey();
-const liveStreak = () => (S.lastDay && dayDiff(S.lastDay, dayKey()) > 2 ? 0 : S.streak || 0);
 // Overall progress from a saved state: every skill's score averaged and capped at the "proficient" line. A class with no
 // skills counts finished homework, well-learned recall questions and finished chapter problems.
 function calcProgress(st, skills, cards, mastered, bank) {
@@ -24,7 +23,6 @@ function calcProgress(st, skills, cards, mastered, bank) {
 }
 const progressPct = () => calcProgress(S, SKILLS, typeof allCards === 'function' ? allCards().length : 0, typeof cardsMastered === 'function' ? cardsMastered() : 0,
   typeof CHAPTERS !== 'undefined' ? CHAPTERS.reduce((n, c) => n + c.counts.problems, 0) : 0);
-const rankName = () => PACK.ranks[Math.min(PACK.ranks.length - 1, Math.floor((progressPct() / 100) * PACK.ranks.length))];
 const MASTERY = ['Started', 'Developing', 'Proficient', 'Mastered'];
 // Skills behind the homework problems you haven't finished yet.
 const focusSkills = () => new Set([

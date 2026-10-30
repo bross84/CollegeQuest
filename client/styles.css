@@ -301,7 +301,6 @@ form[data-form] .field { margin-bottom: -6px; }
 .slabel { margin: 16px 10px 4px; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
 .sfoot { margin-top: 18px; padding: 10px 10px 0; border-top: 1px solid var(--line); }
 .count { flex: none; font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
-.count.due { border-color: var(--accent); color: var(--accent); }
 .addch { display: flex; flex-direction: column; gap: 8px; padding: 6px 10px; }
 .ptitle { font-size: 1.3rem; margin-bottom: 14px; overflow-wrap: anywhere; }
 .chhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
@@ -319,7 +318,6 @@ a.btn { display: inline-block; text-decoration: none; }
 .mine-item.chcard { color: inherit; text-decoration: none; }
 .chcard span small { display: block; }
 .zone.due .blocks li:first-child { padding-top: 0; }
-.standline { display: block; max-width: 520px; }
 select.line.sm { padding: 6px 10px; font-size: .9rem; }
 .docs { display: flex; flex-direction: column; }
 .paste { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 0 14px; }

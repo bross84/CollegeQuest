@@ -50,11 +50,6 @@ const coreName = () => { const k = keyDate(CLASS); return k && k.label ? k.label
 const partTitle = () => { const k = keyDate(CLASS); return k && k.label ? k.label + ' · ' + fmtDate(k.date) : PACK.coreTitle; };
 const fmtDate = (d) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const brandHTML = () => `<div class="brandbox"><button class="link" data-act="c-classes">‹ Classes</button><div class="brand">${esc(CLASS.name)}</div></div>`;
-// Rank, progress and streak: one muted line, at the foot of the overview.
-function standLine() {
-  const pct = progressPct(), st = liveStreak();
-  return `<small class="standline">${esc(rankName())} &middot; Progress ${pct}%${st ? ` &middot; <span title="A day counts when you answer a problem. One missed day is forgiven.">${plural(st, 'day')} in a row</span>` : ''} &middot; ${plural(S.total, 'problem')} answered, ${S.right} right on the first try.</small>`;
-}
 function examHTML() {
   const dte = daysToExam(), ready = SKILLS.some(isChapter);
   if (dte === null && !ready) return '';

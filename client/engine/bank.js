@@ -47,7 +47,7 @@ const docsWithProblems = () => sourceDocs().filter((d) => allProblems().some((p)
 function practiceTab(ch) {
   const gs = GUIDES.filter((g) => inChapter(g, ch.id)), cards = gs.reduce((n, g) => n + g.cards.length, 0), due = chapterDue(ch.id);
   const recall = `<section class="zone"><h3>Recall questions</h3>${cards
-    ? `<div class="mine"><div class="row"><button class="btn" data-act="g-quiz" data-ch="${ch.id}">${due ? `Quiz me (${plural(due, 'question')} due)` : 'Quiz me'}</button></div></div>
+    ? `<div class="mine"><div class="row"><button class="btn" data-act="g-quiz" data-ch="${ch.id}">Quiz me</button></div></div>
       <small>${plural(cards, 'question')} from this chapter’s study guide, brought back on a spaced schedule.</small>`
     : `<small>Make a study guide on the <a href="${chHash(ch.id, 'guide')}">Guide tab</a> to get recall questions.</small>`}</section>`;
   if (ch.unsorted) return `${recall}<section class="zone"><h3>Problems</h3><small>Move materials into a chapter to build a problem bank from them.</small></section>`;

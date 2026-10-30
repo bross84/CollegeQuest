@@ -244,5 +244,5 @@ function learnTab(ch) {
   const next = list.find(todo), due = chapterDue(ch.id);
   return `${next ? `<div class="acts"><button class="btn big" data-act="g-sec" data-id="${next.g.id}" data-i="${next.i}">${secState(next) === 'working' ? 'Continue' : 'Start'}: ${esc(next.sec.heading)}</button></div>` : '<small>You’ve been through every section here.</small>'}
     <section class="zone"><h3>Sections &middot; ${list.length}</h3>${list.map(secRowHTML).join('')}</section>
-    ${due ? `<div class="acts"><button class="btn alt" data-act="g-quiz" data-ch="${ch.id}">Review ${plural(due, 'question')} due</button></div>` : ''}`;
+    ${due ? `<div class="acts"><button class="btn alt" data-act="g-quiz" data-ch="${ch.id}">Review recall questions</button></div>` : ''}`;
 }

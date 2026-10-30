@@ -137,11 +137,11 @@ function overviewHTML() {
 
 // ---- chapter page ----
 function chapterHTML(r) {
-  const ch = r.chapter, tab = ch.unsorted && r.tab === 'learn' ? 'materials' : r.tab, due = ch.unsorted ? 0 : chapterDue(ch.id);
+  const ch = r.chapter, tab = ch.unsorted && r.tab === 'learn' ? 'materials' : r.tab;
   const head = `<div class="chhead"><h1 class="ptitle">${esc(ch.title)}</h1>${ch.unsorted
     ? '<small>Materials and guides that aren’t in a chapter yet. File each one with its chapter picker.</small>'
     : `<span class="chacts"><button class="link" data-act="ch-rename">Rename</button><button class="link" data-act="ch-del">${CH.delArmed ? 'Really delete? Its materials become Unsorted. Click again' : 'Delete chapter'}</button></span>`}</div>`;
-  const tabs = `<div class="tabs" role="tablist">${TABS.map(([k, l]) => `<a class="tab ${k === tab ? 'on' : ''}" role="tab" aria-selected="${k === tab}" href="${chHash(ch.id, k)}">${l}${k === 'practice' ? countPill(due, 'due') : ''}</a>`).join('')}</div>`;
+  const tabs = `<div class="tabs" role="tablist">${TABS.map(([k, l]) => `<a class="tab ${k === tab ? 'on' : ''}" role="tab" aria-selected="${k === tab}" href="${chHash(ch.id, k)}">${l}</a>`).join('')}</div>`;
   const body = { learn: learnTab, materials: materialsTab, guide: guideTab, practice: practiceTab, tutor: tutorTab }[tab](ch, r);
   return `${head}${tabs}<div class="tabbody">${body}</div>`;
 }
