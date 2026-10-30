@@ -341,7 +341,7 @@ function renderExam() {
       ${opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''} ${String(k) === EX.answers[i] ? 'chosen' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : `<div class="where">${mine ? esc(mine) : '(left blank)'}</div>`}${verdict}
       ${relatedHTML(p)}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
-      <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${PACK.videoWord}`.trim() || CLASS.name, true)}</div></div>`;
+      <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${subjectWord()}`.trim(), true, p.text)}</div></div>`;
   }).join('')}`;
   window.scrollTo(0, 0);
 }

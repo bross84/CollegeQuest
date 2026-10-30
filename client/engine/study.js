@@ -138,7 +138,7 @@ function guideBodyHTML(g) {
     return `<section class="gsec" id="gs-${i}"><h3>${esc(s.heading)}</h3>${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
     ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     ${s.terms.length ? `<dl class="gterms">${s.terms.map((t) => `<dt>${esc(t.term)}</dt><dd>${esc(t.def)}</dd>`).join('')}</dl>` : ''}
-    <div class="acts gsact">${smp ? `<button class="link" data-act="g-asksec" data-id="${g.id}" data-i="${i}">${asking ? 'Hide question box' : 'Ask about this section'}</button>` : ''}${videosHTML(s.video || `${s.heading} ${CLASS.name}`, true)}</div>
+    <div class="acts gsact">${smp ? `<button class="link" data-act="g-asksec" data-id="${g.id}" data-i="${i}">${asking ? 'Hide question box' : 'Ask about this section'}</button>` : ''}${videosHTML(s.video || `${s.heading} ${subjectWord()}`, true, `${s.heading}. ${s.summary}`)}</div>
     ${asking ? followHTML({ title: 'Ask about this section', placeholder: 'e.g. What does this term mean?' }) : ''}</section>`;
   }).join('');
   return `<div class="prob"><div class="eyebrow">Study guide</div><h2 class="gtitle">${esc(g.title)}</h2>
@@ -209,7 +209,7 @@ function buildChoices(x) {
   return { choices: all, ans: all.indexOf(a) };
 }
 // What to search for when a card was missed: the section's own video search, else the topic in this class.
-const cardVideoQ = (x) => { const sec = x.g.sections.find((t) => t.heading === x.c.topic); return (sec && sec.video) || `${x.c.topic || x.c.q} ${CLASS.name}`; };
+const cardVideoQ = (x) => { const sec = x.g.sections.find((t) => t.heading === x.c.topic); return (sec && sec.video) || `${x.c.topic || x.c.q} ${subjectWord()}`; };
 function renderQuiz() {
   const x = Q.items[Q.i], st = Q.state, locked = st === 'right' || st === 'shown', last = Q.i === Q.items.length - 1;
   let input;
@@ -232,7 +232,7 @@ function renderQuiz() {
 // The worked steps of a problem, shown with its answer.
 const stepsHTML = (x) => (x.c.steps && x.c.steps.length ? `<ol class="steps">${x.c.steps.map((t) => `<li>${fmtMath(t)}</li>`).join('')}</ol>` : '') + (x.c.aiKey ? '<small>The AI worked out this answer, so double-check it.</small>' : '');
 // After a card is answered: ask the tutor about it, and watch a video on the topic.
-const quizHelpHTML = (x, lazy) => `${smp ? `<button class="link" data-act="follow">${Q.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>` : ''}${videosHTML(cardVideoQ(x), lazy)}`;
+const quizHelpHTML = (x, lazy) => `${smp ? `<button class="link" data-act="follow">${Q.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>` : ''}${videosHTML(cardVideoQ(x), lazy, `${x.c.q} (answer: ${x.c.a})`)}`;
 // kind: 'first' (typed it right), 'retry' (right from the choices), 'miss' (had to be shown)
 function gRecord(x, kind) {
   const r = cardRec(x.id) || { box: 0, seen: 0 };

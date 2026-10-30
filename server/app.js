@@ -507,10 +507,11 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
     const key = youtubeKey();
     if (!key) return res.json({ videos: [], fallback: true });
     try {
-      const url = `${cfg.youtube.base}/search?${new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', safeSearch: 'strict', maxResults: '3', q, key })}`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) return res.json({ videos: [], fallback: true }); // quota used up, bad key or outage: the client shows a plain search link
-      const data = await r.json();
+      const search = async (extra) => fetch(`${cfg.youtube.base}/search?${new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', safeSearch: 'strict', relevanceLanguage: 'en', maxResults: '3', q, key, ...extra })}`, { signal: AbortSignal.timeout(10000) });
+      let r = await search({ videoCategoryId: '27' }); // Education first: lessons, not reaction videos
+      let data = r.ok ? await r.json() : null;
+      if (!data || !(data.items || []).length) { r = await search({}); data = r.ok ? await r.json() : null; }
+      if (!data) return res.json({ videos: [], fallback: true }); // quota used up, bad key or outage: the client shows a plain search link
       const videos = (data.items || []).filter((i) => i && i.id && i.id.videoId).slice(0, 3).map((i) => ({
         id: String(i.id.videoId), title: clip(i.snippet && i.snippet.title, 150), channel: clip(i.snippet && i.snippet.channelTitle, 80),
         thumb: `https://i.ytimg.com/vi/${encodeURIComponent(i.id.videoId)}/mqdefault.jpg`,

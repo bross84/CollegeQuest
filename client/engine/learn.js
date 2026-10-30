@@ -133,7 +133,7 @@ function showSection(gid, i) {
     ${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
     ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     ${s.terms.length ? `<dl class="gterms">${s.terms.map((t) => `<dt>${esc(t.term)}</dt><dd>${esc(t.def)}</dd>`).join('')}</dl>` : ''}
-    <div class="acts"><button class="btn" id="nextbtn" data-act="g-secgo" data-id="${p.g.id}" data-i="${p.i}">Start the problems</button>${videosHTML(s.video || `${s.heading} ${CLASS.name}`, true)}</div></div>`;
+    <div class="acts"><button class="btn" id="nextbtn" data-act="g-secgo" data-id="${p.g.id}" data-i="${p.i}">Start the problems</button>${videosHTML(s.video || `${s.heading} ${subjectWord()}`, true, `${s.heading}. ${s.summary}`)}</div></div>`;
   window.scrollTo(0, 0);
   const b = document.getElementById('nextbtn'); if (b) b.focus();
 }
