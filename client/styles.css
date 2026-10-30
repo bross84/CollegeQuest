@@ -498,8 +498,7 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .xrow .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .xrow select.line { width: 100%; min-height: 42px; padding: 8px 12px; font-size: 1rem; }
 .quick { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
-.xfocus { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
-.xfocus input.line { width: 100%; min-height: 42px; padding: 8px 12px; font-size: 1rem; }
+.xrow input.line { width: 100%; min-height: 42px; padding: 8px 12px; font-size: 1rem; }
 .sbox { padding: 0 10px 8px; }
 .sbox input.line { min-height: 36px; padding: 6px 10px; font-size: .95rem; }
 .picker .sbox { padding: 0; }
