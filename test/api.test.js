@@ -23,7 +23,7 @@ before(async () => {
     req.on('end', () => {
       const j = JSON.parse(b);
       mockHits.push(j.model);
-      if (j.model === 'bad') { res.writeHead(429, { 'Content-Type': 'application/json', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '250', 'x-ratelimit-limit-tokens': '12000', 'x-ratelimit-remaining-tokens': '0', 'x-ratelimit-reset-tokens': '6s' }); return res.end('{"error":{"message":"slow down"}}'); }
+      if (j.model === 'bad') { res.writeHead(429, { 'Content-Type': 'application/json' }); return res.end('{"error":{"message":"slow down"}}'); }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { content: '<think>x</think>answer from ' + j.model } }] }));
     });
@@ -130,9 +130,6 @@ test('ai: falls back to the next provider and strips reasoning', async () => {
   assert.deepStrictEqual(mockHits, ['bad', 'good']);
   assert.strictEqual((await call('POST', '/api/ai', { messages: [] })).res.status, 400);
   assert.deepStrictEqual((await call('GET', '/api/ai/status')).data.providers, ['groq', 'openrouter']);
-  const used = (await call('GET', '/api/ai/usage')).data.usage;
-  assert.strictEqual(used.length, 1, 'only a provider that reports its limits is listed');
-  assert.deepStrictEqual([used[0].provider, used[0].limitRequests, used[0].remainingRequests, used[0].remainingTokens, used[0].resetTokens], ['groq', 1000, 250, 0, '6s']);
 });
 
 test('think filter drops reasoning even when tags are split across chunks', () => {
@@ -395,4 +392,18 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
   assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 8);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('find: every word must appear, in documents (with snippets) and in problems', async () => {
+  const c = (await call('POST', '/api/classes', { name: 'FIND 1', pack: 'general' })).data;
+  const note = (await call('POST', `/api/classes/${c.id}/notes`, { name: 'Ions', text: 'Common polyatomic ions include sulfate, nitrate and ammonium.\n\nSulfate is SO4 with a 2- charge.' })).data;
+  await call('POST', `/api/classes/${c.id}/problems`, { problems: [{ kind: 'original', text: 'Name the polyatomic ion NO3-.', answer: 'nitrate' }, { kind: 'original', text: 'Balance H2 + O2.', answer: '' }] });
+  const hit = (await call('GET', `/api/classes/${c.id}/find?q=Polyatomic%20nitrate`)).data;
+  assert.deepStrictEqual(hit.docs.map((d) => d.id), [note.id]);
+  assert.match(hit.docs[0].snippets[0], /polyatomic ions/i);
+  assert.strictEqual(hit.problems.length, 1);
+  const none = (await call('GET', `/api/classes/${c.id}/find?q=polyatomic%20zebra`)).data;
+  assert.deepStrictEqual([none.docs.length, none.problems.length], [0, 0]);
+  assert.deepStrictEqual((await call('GET', `/api/classes/${c.id}/find?q=`)).data, { docs: [], problems: [] });
+  assert.strictEqual((await call('GET', '/api/classes/nope/find?q=x')).res.status, 404);
 });

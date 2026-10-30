@@ -12,7 +12,7 @@ const SMIX = {
   book: { label: 'More from the text', exam: 20, book: 60, ai: 20 },
   fresh: { label: 'Mostly new problems', exam: 20, book: 30, ai: 50 },
 };
-const SS = { csize: 15, xsize: 20, mix: 'like', tpl: null, delId: null }; // tpl: the exam to model on; null until chosen, then defaults to the first exam
+const SS = { csize: 15, xsize: 20, mix: 'like', tpl: null, focus: '', delId: null }; // tpl: the exam to model on; null until chosen, then defaults to the first exam
 const READ_TRIED = new Set(); // documents already read for problems this session, so a build doesn't read them again
 
 async function loadSets() {
@@ -84,7 +84,8 @@ async function linkExam(redo) {
 }
 
 // ---- building ----
-// o: { kind: 'chapter'|'exam', chapterIds, title, size, mix, tplId, where }
+// o: { kind: 'chapter'|'exam', chapterIds, title, size, mix, tplId, focus, where }
+// focus: a topic to stress (e.g. "polyatomic ions"). It widens the pool to every instructor question and any problem in the class that mentions it.
 async function buildSet(o) {
   if (BK.busy) return;
   if (!smp) { BK.err = 'Building a set needs the AI, which isn’t set up on this server.'; return bankHome(o.where); }
@@ -98,7 +99,9 @@ async function buildSet(o) {
     if (unread.length) { unread.forEach((d) => READ_TRIED.add(d.id)); await readDocs(unread, tally); await loadProblems(); }
     await linkExam(!!unread.length);
     const inScope = (p) => (p.chapterId && o.chapterIds.includes(p.chapterId)) || (o.tplId && p.sourceDoc === o.tplId);
-    let pool = allProblems().filter(inScope);
+    const stems = [...wordsOf(o.focus || '')].map((w) => new RegExp('\\b' + w.slice(0, 6).replace(/[^a-z0-9]/g, '')));
+    const onFocus = (p) => stems.some((re) => re.test(`${p.text} ${p.topic}`.toLowerCase()));
+    let pool = allProblems().filter((p) => inScope(p) || (stems.length && p.kind === 'original' && (srcOf(p) === 'exam' || onFocus(p))));
     if (pool.length < 3 && o.kind === 'chapter' && o.chapterIds.length === 1) { // nothing to copy: write problems from the notes
       await genCore(o.chapterIds[0], tally); await loadProblems(); pool = allProblems().filter(inScope);
     }
@@ -110,7 +113,7 @@ async function buildSet(o) {
     const rank = { exam: 0, book: 1, ai: 2 };
     // textbook problems matched to an instructor question come before the rest of the textbook
     const matched = new Set(pool.filter((p) => srcOf(p) === 'exam').flatMap((p) => p.links || []));
-    const order = (p) => rank[srcOf(p)] * 2 + (srcOf(p) === 'book' && !matched.has(p.id) ? 1 : 0);
+    const order = (p) => (stems.length && onFocus(p) ? 0 : 10) + rank[srcOf(p)] * 2 + (srcOf(p) === 'book' && !matched.has(p.id) ? 1 : 0);
     const cand = [...shuffle(pool)].sort((a, b) => order(a) - order(b)).slice(0, 120);
     const multi = o.chapterIds.length > 1, letter = { exam: 'E', book: 'B', ai: 'A' };
     BK.note = 'Choosing the problems that cover the main ideas…'; paintBank();
@@ -118,6 +121,7 @@ async function buildSet(o) {
     const r = await aiJson(`${rules()}\n\nBelow are numbered practice problems for "${CLASS.name}". E = from the instructor’s practice exam, B = from the textbook, A = written by an AI. `
       + `Choose ${nPick} of them for a study set that captures the main ideas: cover every distinct topic, skip near-duplicates, and mix easy and hard. Aim for about ${nE} E and ${nB} B (take more of the other kind if one runs short; use A only if you must). `
       + (multi ? 'The set spans several chapters; keep the same balance between chapters as the E problems have. ' : '')
+      + (o.focus ? `The student especially needs practice on: ${o.focus}. Make at least half of your choices about it when enough of them do (the topic may not be named in a problem; judge by what it asks), and fill the rest from the other material. ` : '')
       + 'Name each pick’s topic in 2 to 4 words.\n\nReply with only this JSON:\n{"picks":[{"n":1,"topic":"short topic"}]}\n\nProblems:\n' + lines, BK.ctl, bankWait(), 3000);
     const used = new Set(), picks = [];
     (Array.isArray(r && r.picks) ? r.picks : []).forEach((x) => { const i = (+(x && x.n) || 0) - 1; if (cand[i] && !used.has(i) && picks.length < nPick) { used.add(i); picks.push({ p: cand[i], topic: String((x && x.topic) || cand[i].topic || '').slice(0, 60) }); } });
@@ -131,7 +135,7 @@ async function buildSet(o) {
       BK.note = 'Writing new problems like the ones you’ll be tested on…'; paintBank();
       const k = Math.min(want, 12), seen = new Set(allProblems().map((p) => normText(p.text)));
       const models = picks.map((x, i) => `${i + 1}. [${letter[srcOf(x.p)]}] ${x.p.text.replace(/\s+/g, ' ').slice(0, 240)}${x.p.answer ? ` (answer: ${x.p.answer.slice(0, 60)})` : ''}`).join('\n');
-      const v = await aiJson(`${rules()}\n\nBelow are numbered problems a student will be tested on. Write ${k} NEW practice problems, each modelled on one of them (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Spread them across different models, preferring the E ones. Do not copy any original. `
+      const v = await aiJson(`${rules()}\n\nBelow are numbered problems a student will be tested on. Write ${k} NEW practice problems, each modelled on one of them (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Spread them across different models, preferring the E ones. ${o.focus ? `Most should be about ${o.focus}. ` : ''}Do not copy any original. `
         + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new problem","answer":"the final answer","steps":["one short step"]}]}\n\nProblems:\n${models}`, BK.ctl, bankWait(), 3500);
       const fresh = (Array.isArray(v && v.problems) ? v.problems : []).slice(0, k).map((q) => {
         const base = (picks[(+(q && q.like) || 1) - 1] || picks[0]).p;
@@ -218,6 +222,7 @@ function examBuilderHTML(list) {
     <div class="xrow"><label class="fld"><small>Model it on</small><select class="line" data-ss="tpl">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="fld"><small>Mix</small><select class="line" data-ss="mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
       <label class="fld"><small>Size</small><select class="line" data-ss="xsize">${sizeOptions(SS.xsize)}</select></label></div>
+    <label class="fld xfocus"><small>Focus on (optional): a topic to stress, drawn from every exam and chapter, not only the ticked ones</small><input class="line" type="text" id="xfocus" data-ss="focus" maxlength="100" placeholder="e.g. polyatomic ions" value="${esc(SS.focus)}"></label>
     <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button></div>
     ${list.length >= 3 ? `<div class="quick"><small>Or a quick random exam from everything in the bank:</small>
       <div class="answer"><select class="line" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select><button class="btn alt" data-act="b-exmix">Start random exam</button></div></div>` : ''}
@@ -244,12 +249,14 @@ async function setAct(act, t) {
   }
   if (act === 'b-xbuild') {
     const ids = CHAPTERS.map((c) => c.id).filter((c) => XS.ch.has(c));
-    if (!ids.length && !SS.tpl) { BK.err = 'Tick at least one chapter.'; return renderRoute(true); }
-    const tpl = DOCS.find((d) => d.id === SS.tpl);
-    return buildSet({ kind: 'exam', chapterIds: ids, tplId: SS.tpl, title: tpl ? `Exam like ${tpl.name.replace(/\.[^.]+$/, '')}` : `Practice exam, ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, size: SS.xsize, mix: SS.mix, where: null });
+    const fi = document.getElementById('xfocus'), focus = (fi ? fi.value : SS.focus).trim().slice(0, 100);
+    SS.focus = focus;
+    if (!ids.length && !SS.tpl && !focus) { BK.err = 'Tick at least one chapter.'; return renderRoute(true); }
+    const tpl = DOCS.find((d) => d.id === SS.tpl), base = tpl ? `Exam like ${tpl.name.replace(/\.[^.]+$/, '')}` : `Practice exam, ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    return buildSet({ kind: 'exam', chapterIds: ids, tplId: SS.tpl, focus, title: focus ? `${base}, focus: ${focus}` : base, size: SS.xsize, mix: SS.mix, where: null });
   }
 }
 app.addEventListener('change', (e) => {
   const t = e.target;
-  if (t.dataset && t.dataset.ss && t.matches('select')) { SS[t.dataset.ss] = /size$/.test(t.dataset.ss) ? +t.value : t.value; }
+  if (t.dataset && t.dataset.ss && t.matches('select, input[type=text]')) { SS[t.dataset.ss] = /size$/.test(t.dataset.ss) ? +t.value : t.value; }
 });

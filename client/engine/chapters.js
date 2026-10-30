@@ -33,6 +33,7 @@ function parseRoute() {
   const p = (m[2] || '').split('/').filter(Boolean), r = { cid: m[1], view: 'overview' };
   if (p[0] === 'ch' && p[1]) { r.view = 'chapter'; r.chId = p[1]; r.tab = TABS.some((t) => t[0] === p[2]) ? p[2] : 'materials'; r.gid = p[2] === 'guide' ? p[3] : undefined; }
   else if (p[0] === 'guide' && p[1]) { r.view = 'guide'; r.gid = p[1]; }
+  else if (p[0] === 'search') { r.view = 'search'; try { r.q = decodeURIComponent(p.slice(1).join('/')); } catch (e) { r.q = ''; } }
   else if (['docs', 'hw', 'sets', 'exams'].includes(p[0])) r.view = p[0];
   return r;
 }
@@ -72,6 +73,7 @@ function renderRoute(keepScroll) {
     hw: () => shell('hw', `<h1 class="ptitle">Homework</h1>${mineSection()}`),
     sets: () => shell('sets', practiceSetsHTML()),
     exams: () => shell('exams', examsHTML()),
+    search: () => { shell('search', searchPageHTML(r.q)); runFind(r.q); },
   }[r.view];
   pane();
   window.scrollTo(0, keepScroll ? y : 0);
@@ -90,6 +92,7 @@ function sidebarHTML(active) {
   const openHw = S.mine.filter((m) => m.status !== 'done').length;
   return `<nav class="side" aria-label="${esc(CLASS.name)}">
     <div class="sbrand"><button class="link" data-act="c-classes">‹ Classes</button><div class="brand">${esc(CLASS.name)}</div></div>
+    ${searchBoxHTML()}
     ${a('overview', baseHash(), 'Overview')}
     <div class="slabel">Chapters</div>
     ${CHAPTERS.map((c) => a('ch:' + c.id, chHash(c.id), esc(c.title), countPill(chapterDue(c.id), 'due'))).join('')}
@@ -100,18 +103,18 @@ function sidebarHTML(active) {
     ${SKILLS.length ? a('sets', routeHash('sets'), 'Practice sets') : ''}
     ${a('exams', routeHash('exams'), 'Practice exams')}
     ${a('docs', routeHash('docs'), 'All documents', countPill(DOCS.length))}
-    ${usageHTML()}
     <div class="sfoot"><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button></div>
   </nav>`;
 }
 function pickerHTML(active) {
   const opt = (key, hash, label) => `<option value="${hash}" ${active === key ? 'selected' : ''}>${label}</option>`;
   return `<div class="picker"><div class="prow1"><button class="link" data-act="c-classes">‹ Classes</button><b class="pname">${esc(CLASS.name)}</b><button class="link" data-act="c-edit" data-id="${CLASS.id}">Settings</button></div>
+    ${searchBoxHTML()}
     <select class="line" id="cpick" aria-label="Go to">
       ${opt('overview', baseHash(), 'Overview')}
       <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title) + (chapterDue(c.id) ? ` (${chapterDue(c.id)} due)` : ''))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
       <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Practice exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
-    </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}${usageHTML()}</div>`;
+    </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}</div>`;
 }
 function shell(active, main) {
   app.innerHTML = `<div class="shell">${pickerHTML(active)}${sidebarHTML(active)}<main class="pane">${main}</main></div>`;

@@ -181,4 +181,5 @@ function formSubmit(form) {
   if (form.dataset.form === 'login') doLogin();
   else if (form.dataset.form === 'gq') gAnswer();
   else if (form.dataset.form === 'chapter-add') addChapter(form);
+  else if (form.dataset.form === 'class-search') { const q = form.q.value.trim(); if (q) go(findHash(q)); }
 }

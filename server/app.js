@@ -46,8 +46,6 @@ function createApp(cfg) {
   api.use(auth.middleware);
 
   // ---- AI ----
-  api.get('/ai/usage', (req, res) => res.json(ai.usage()));
-  api.post('/ai/usage', async (req, res) => res.json(await ai.probe()));
   api.get('/ai/status', (req, res) => res.json({ ...ai.status(), videos: !!youtubeKey() }));
 
   // ---- settings (keys are never sent back in full) ----
@@ -309,6 +307,33 @@ function createApp(cfg) {
     const hits = search(docs.filter((d) => d.chapter_id === ch), q, 3);
     if (hits.length < 3) search(docs.filter((d) => d.chapter_id !== ch), q, 3 - hits.length).forEach((h) => hits.push(h));
     res.json(hits);
+  });
+
+  // Plain-text find across a class: every word must appear, in each document (with a few snippets) and in the problem bank.
+  api.get('/classes/:id/find', (req, res) => {
+    const c = needClass(req, res); if (!c) return;
+    const terms = [...new Set(clip(req.query.q, 200).toLowerCase().split(/\s+/).filter(Boolean))].slice(0, 6);
+    if (!terms.length) return res.json({ docs: [], problems: [] });
+    const all = (t) => terms.every((w) => t.includes(w));
+    const docs = [];
+    for (const d of db.prepare('SELECT id, name, kind, tag, chapter_id, text FROM documents WHERE class_id = ?').all(c.id)) {
+      const low = `${d.name}
+${d.text}`.toLowerCase();
+      if (!all(low)) continue;
+      const snippets = [], body = d.text.toLowerCase();
+      let n = 0, from = 0, last = -1000;
+      for (let i = body.indexOf(terms[0]); i >= 0; i = body.indexOf(terms[0], from)) {
+        n++; from = i + terms[0].length;
+        if (snippets.length < 3 && i - last > 200) { last = i; snippets.push((i > 90 ? '… ' : '') + d.text.slice(Math.max(0, i - 90), i + 140).replace(/\s+/g, ' ').trim() + ' …'); }
+      }
+      docs.push({ id: d.id, name: d.name, kind: d.kind, tag: d.tag, chapterId: d.chapter_id, snippets, n });
+    }
+    docs.sort((a, b) => b.n - a.n);
+    const problems = db.prepare('SELECT * FROM problems WHERE class_id = ? ORDER BY created_at').all(c.id)
+      .filter((p) => all(`${p.text}
+${p.topic}
+${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
+    res.json({ docs: docs.slice(0, 20).map(({ n, ...d }) => d), problems });
   });
 
   // ---- chapters: the notebook's table of contents ----
