@@ -24,15 +24,21 @@ async function docParts(picked, pasted) {
 // The prompt that lists the problems in one part. withAnswers also copies any answer key found in the material.
 function findPrompt(part, { skillHint, withAnswers, source, chapters }) {
   return `You are helping an adult student who is taking "${CLASS.name}". Below are photos and/or text from their class materials (${source || 'a worksheet, textbook pages, or notes'}). `
-    + 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
+    + findRules({ skillHint, withAnswers, chapters }) + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[${findShape({ skillHint, withAnswers })}]}\n\n`
+    + findChapters(chapters)
+    + (part.text ? `Text:\n${part.text}` : '(no text, see the photos)');
+}
+// How to list the problems in a part, the JSON for one problem, and the chapter list for material that covers several chapters.
+// The study-guide prompt (study.js) uses them too, so a textbook's guide and its problems come from one read.
+const findShape = ({ skillHint, withAnswers }) => `{${['"number":"21"', '"text":"the problem"', '"format":"mc"', '"choices":["option"]', withAnswers && '"answer":""', skillHint].filter(Boolean).join(',')}}`;
+const findChapters = (chapters) => (chapters && chapters.length ? `This material may cover several chapters, so give each problem its own "chapter": the number of the chapter it belongs to from the list below, or 0 if none fits.\n${chapters.map((c, i) => `${i + 1}. ${c.title}`).join('\n')}\n\n` : '');
+function findRules({ withAnswers }) {
+  return 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
     + `Transcribe each problem as plain text: ${PACK.finder}. Do NOT solve anything.${withAnswers ? ' If the material has an answer key or solutions, copy the final answer for each problem into "answer"; leave "answer" empty when there is none. Never work out an answer yourself.' : ''}\n\n`
     + 'Give each problem’s number as printed ("number": "21", "3.21" or "Question 9"; empty if it has none), and leave the number out of "text". '
     + 'Keep each problem’s answer format: "format" is "mc" for multiple choice, "tf" for true/false, "fill" for fill in the blank, "parts" for one question with several labelled parts that each need their own written answer, or "work" for anything else solved by working it out. '
     + 'For multiple choice put only the question in "text" and list every option, in order and without its a) b) c) letter, in "choices". Fix any options that the text extraction ran together. For "parts", list each part (without its letter) in "choices" the same way. A question whose a) b) c) items are tasks or blanks to fill in is "parts", not multiple choice. '
-    + `${withAnswers ? 'For multiple choice, "answer" is the text of the correct option (not its letter) when the material shows the key. ' : ''}\n\n`
-    + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[{${['"number":"21"', '"text":"the problem"', '"format":"mc"', '"choices":["option"]', withAnswers && '"answer":""', skillHint].filter(Boolean).join(',')}}]}\n\n`
-    + (chapters && chapters.length ? `This material may cover several chapters, so give each problem its own "chapter": the number of the chapter it belongs to from the list below, or 0 if none fits.\n${chapters.map((c, i) => `${i + 1}. ${c.title}`).join('\n')}\n\n` : '')
-    + (part.text ? `Text:\n${part.text}` : '(no text, see the photos)');
+    + `${withAnswers ? 'For multiple choice, "answer" is the text of the correct option (not its letter) when the material shows the key. ' : ''}\n\n`;
 }
 
 // A problem as the AI describes it, tidied: the question, its answer format, its options and its answer. A letter answer

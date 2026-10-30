@@ -47,13 +47,18 @@ function syncGB() {
 const gs = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
 const gl = (v, n, m) => (Array.isArray(v) ? v : []).map((x) => gs(x, n)).filter(Boolean).slice(0, m);
 
-function partPrompt(i, n, text, focus) {
+// find: also list the problems in the text (a document whose problems haven't been read yet), so one read gives both;
+// it holds the chapters to file them under when the document covers several.
+function partPrompt(i, n, text, find) {
+  const fo = find && { withAnswers: true, chapters: find.ask, skillHint: find.ask ? '"chapter":0' : '' };
   return `You are writing a study guide for an adult student taking "${CLASS.name}". ${CLASS.description ? `About the course: ${CLASS.description}. ` : ''}Below is part ${i + 1} of ${n} of their reading. Use ONLY what this text says. Do not invent facts.\n\n`
     + 'Reply with only this JSON:\n'
     + '{"sections":[{"heading":"short heading taken from the text","summary":"2 or 3 plain sentences","video":"a YouTube search (3 to 6 words) that finds a short lesson on the topic of this section","terms":[{"term":"","def":"one clear sentence"}],"points":["a fact or rule worth knowing cold"]}],'
-    + '"cards":[{"q":"a question whose answer is 1 to 4 words","a":"the answer","accept":["other correct wordings or abbreviations"],"wrong":["three believable wrong answers of the same kind"]}]}\n\n'
+    + '"cards":[{"q":"a question whose answer is 1 to 4 words","a":"the answer","accept":["other correct wordings or abbreviations"],"wrong":["three believable wrong answers of the same kind"]}]'
+    + (fo ? `,"topic":"short name of the unit or section","problems":[${findShape(fo)}]` : '') + '}\n\n'
     + 'Limits for this part: at most 3 sections, 10 terms in total, 6 points in total, 8 cards. Skip anything that is only an example, a figure caption, a table of contents or an index. '
     + 'Cards test the most important ideas, terms and facts: "What is the term for ...?", "Which ... does ...?", "What value/number ...?". Each question must make sense on its own, with no "according to the text".\n\n'
+    + (fo ? `"problems" lists the practice problems printed in this part (at most 30), copied as written, not new ones. ${findRules(fo)}${findChapters(fo.chapters)}` : '')
     + `Text:\n${text}`;
 }
 
@@ -71,7 +76,7 @@ async function aiJson(prompt, ctl, onWait, maxTokens = 4000) {
     }
   }
 }
-const aiPart = (prompt, ctl) => aiJson(prompt, ctl, (s) => { GB.note = `Waiting for the AI quota (${s}s)…`; renderBuilder(); });
+const aiPart = (prompt, ctl, maxTokens) => aiJson(prompt, ctl, (s) => { GB.note = `Waiting for the AI quota (${s}s)…`; renderBuilder(); }, maxTokens);
 
 async function gBuild() {
   syncGB();
@@ -82,14 +87,23 @@ async function gBuild() {
   GB.busy = true; GB.ctl = new AbortController(); GB.note = 'Reading…'; renderBuilder();
   const sections = [], cards = [], seenQ = new Set();
   let done = 0, failed = 0, total = 0, stopped = false, cut = false, why = '';
+  // The problems in a textbook, handout or notes file are read in the same pass, unless they were read before. Exams aren't
+  // made into guides' problems here; they are read on the Exams page.
+  if (!PLOADED) await loadProblems().catch(() => {});
+  const finds = {}, seen = new Set(allProblems().map((q) => normText(q.text))), tally = { added: 0, cut: false };
   try {
     const parts = [];
-    for (const d of picked) splitChunks((await api('GET', `/api/docs/${d.id}/text`)).text, GCHUNK).forEach((t) => parts.push(t));
+    for (const d of picked) {
+      const text = (await api('GET', `/api/docs/${d.id}/text`)).text;
+      if (d.tag !== 'exam' && !allProblems().some((q) => q.sourceDoc === d.id)) finds[d.id] = readStart(d, text);
+      splitChunks(text, GCHUNK).forEach((t) => parts.push({ t, find: finds[d.id] || null }));
+    }
     cut = parts.length > GMAX_PARTS; total = Math.min(parts.length, GMAX_PARTS);
     for (let i = 0; i < total; i++) {
       GB.note = `Reading part ${i + 1} of ${total}…`; renderBuilder();
       let r;
-      try { r = await aiPart(partPrompt(i, total, parts[i]), GB.ctl); }
+      const find = parts[i].find;
+      try { r = await aiPart(partPrompt(i, total, parts[i].t, find), GB.ctl, find ? 6000 : 4000); }
       catch (e) {
         if (e && e.code === 'cancelled') { stopped = true; break; }
         failed++; why = mineErr(e);
@@ -97,6 +111,7 @@ async function gBuild() {
         continue;
       }
       done++;
+      if (find && find.found.length < PER_DOC) await readTake(find, r, seen, tally).catch(() => {});
       (Array.isArray(r && r.sections) ? r.sections : []).forEach((s) => {
         const sec = {
           heading: gs(s && s.heading, 120) || 'Notes', summary: gs(s && s.summary, 600), video: gs(s && s.video, 120),
@@ -115,6 +130,8 @@ async function gBuild() {
       });
     }
   } catch (e) { GB.err = mineErr(e); }
+  for (const st of Object.values(finds)) { try { await readSave(st, tally); READ_TRIED.add(st.d.id); } catch (e) { /* the guide is still saved; Read its problems can try again */ } }
+  if (Object.keys(finds).length) await loadProblems().catch(() => {});
   GB.busy = false;
   if (!sections.length && !cards.length) {
     GB.err = GB.err || (stopped ? 'Stopped before anything was read.' : failed ? `I couldn’t build it. ${why}` : 'I couldn’t find anything to study in that.');
@@ -124,9 +141,7 @@ async function gBuild() {
   try {
     const g = await api('POST', `/api/classes/${CLASS.id}/guides`, { chapterId: GB.chapterId, title: GB.title.trim() || (picked.length === 1 ? picked[0].name.replace(/\.[^.]+$/, '') : `${picked[0].name.replace(/\.[^.]+$/, '')} and ${picked.length - 1} more`), docs: picked.map((d) => d.id), sections, cards, note });
     const auto = GB.auto;
-    GUIDES.unshift(g);
-    if (auto) await readChapterProblems(picked); // "Prepare this chapter" also reads the textbook's problems, so its tiles practise real ones
-    resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); if (auto) go(chHash(g.chapterId || 'unsorted', 'learn')); else goGuide(g);
+    GUIDES.unshift(g); resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); if (auto) go(chHash(g.chapterId || 'unsorted', 'learn')); else goGuide(g);
   } catch (e) { GB.err = 'Built it, but saving failed: ' + e.message; renderBuilder(); }
 }
 

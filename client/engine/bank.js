@@ -124,42 +124,51 @@ async function readDocs(docs, tally) {
   if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
   const seen = new Set(allProblems().map((p) => normText(p.text)));
   for (const d of docs) {
-    // What an earlier read of this document saved: a question read again is updated in place (so saved exams and progress keep it),
-    // matched by its number or its question text.
-    const old = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original'), oldUsed = new Set();
-    const oldKey = old.map((p) => { const q = readQuestion({ text: p.text, number: p.ref }); return { p, ref: q.ref, k: normText(q.text) }; });
-    const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
     const parts = await docParts([d]);
     if (parts.length > MAX_PARTS) tally.cut = true;
-    const answerKey = parseAnswerKey(parts.map((x) => x.text || '').join('\n'));
-    const found = [];
-    let topic = '';
-    for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && found.length < PER_DOC; i++) {
+    const st = readStart(d, parts.map((x) => x.text || '').join('\n'));
+    for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && st.found.length < PER_DOC; i++) {
       BK.note = `Reading ${d.name}${parts.length > 1 ? ` (part ${i + 1} of ${Math.min(parts.length, MAX_PARTS)})` : ''}…`; paintBank();
-      const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
-      const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
-      topic = topic || String((r && r.topic) || '').slice(0, 80);
-      for (const p of Array.isArray(r && r.problems) ? r.problems : []) {
-        const q = readQuestion(p); // the question's own text decides multiple choice versus parts, not the AI
-        if (!q.answer && q.ref && answerKey[q.ref]) q.answer = answerKey[q.ref];
-        const sh = shapeProblem(q), text = sh.text, k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
-        if (!text) continue;
-        const was = oldKey.find((o) => !oldUsed.has(o.p.id) && ((q.ref && o.ref === q.ref) || o.k === k));
-        if (was) { // the document's own key wins over an earlier reading's answer
-          oldUsed.add(was.p.id); seen.add(k);
-          const p0 = was.p, same = p0.text === text && p0.format === sh.format && JSON.stringify(p0.choices) === JSON.stringify(sh.choices) && p0.ref === q.ref;
-          if (!same || (sh.answer && sh.answer !== p0.answer)) { await api('PATCH', `/api/problems/${p0.id}`, { reread: { text, format: sh.format, choices: sh.choices, ref: q.ref, answer: sh.answer } }); tally.updated = (tally.updated || 0) + 1; }
-          continue;
-        }
-        if (!seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, ref: q.ref, topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
-      }
+      const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (st.ask ? ',"chapter":0' : ''), withAnswers: true, source: st.source, chapters: st.ask }), BK.ctl, bankWait(), 3000);
+      await readTake(st, r, seen, tally);
     }
-    for (let i = 0; i < Math.min(found.length, PER_DOC); i += 100) {
-      const chunk = found.slice(i, Math.min(found.length, PER_DOC)).slice(0, 100);
-      await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: chunk }); tally.added += chunk.length;
-    }
+    await readSave(st, tally);
   }
   return tally;
+}
+// The steps of reading one document's problems, also used when a study guide reads the same text in one pass (study.js).
+// readStart: what an earlier read of the document saved (a question read again is updated in place, matched by its number
+// or its text, so saved exams and progress keep it), and the document's own answer key.
+function readStart(d, text) {
+  const oldKey = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original').map((p) => { const q = readQuestion({ text: p.text, number: p.ref }); return { p, ref: q.ref, k: normText(q.text) }; });
+  const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
+  const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
+  return { d, oldKey, oldUsed: new Set(), ask, source, answerKey: parseAnswerKey(text), found: [], topic: '' };
+}
+// readTake: the problems the AI listed in one part (r.problems, r.topic).
+async function readTake(st, r, seen, tally) {
+  st.topic = st.topic || String((r && r.topic) || '').slice(0, 80);
+  for (const p of Array.isArray(r && r.problems) ? r.problems : []) {
+    const q = readQuestion(p); // the question's own text decides multiple choice versus parts, not the AI
+    if (!q.answer && q.ref && st.answerKey[q.ref]) q.answer = st.answerKey[q.ref];
+    const sh = shapeProblem(q), text = sh.text, k = normText(text), pick = st.ask ? st.ask[(+(p && p.chapter) || 0) - 1] : null;
+    if (!text) continue;
+    const was = st.oldKey.find((o) => !st.oldUsed.has(o.p.id) && ((q.ref && o.ref === q.ref) || o.k === k));
+    if (was) { // the document's own key wins over an earlier reading's answer
+      st.oldUsed.add(was.p.id); seen.add(k);
+      const p0 = was.p, same = p0.text === text && p0.format === sh.format && JSON.stringify(p0.choices) === JSON.stringify(sh.choices) && p0.ref === q.ref;
+      if (!same || (sh.answer && sh.answer !== p0.answer)) { await api('PATCH', `/api/problems/${p0.id}`, { reread: { text, format: sh.format, choices: sh.choices, ref: q.ref, answer: sh.answer } }); tally.updated = (tally.updated || 0) + 1; }
+      continue;
+    }
+    if (!seen.has(k)) { seen.add(k); st.found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, ref: q.ref, topic: st.topic, sourceDoc: st.d.id, chapterId: pick ? pick.id : st.d.chapterId || null }); }
+  }
+}
+// readSave: saves the new problems found, up to PER_DOC.
+async function readSave(st, tally) {
+  for (let i = 0; i < Math.min(st.found.length, PER_DOC); i += 100) {
+    const chunk = st.found.slice(i, Math.min(st.found.length, PER_DOC)).slice(0, 100);
+    await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: chunk }); tally.added += chunk.length;
+  }
 }
 
 // Write practice problems straight from the chapter's materials, for when they hold no problems to copy (notes, slides,

@@ -24,6 +24,14 @@ function findProblems(p) {
 function numbered(p) { return lines(p, /^(\d+)\.\s+(.*)$/gm).map((m) => ({ n: +m[1], text: m[2] })); }
 
 function answer(p) {
+  if (p.includes('writing a study guide')) { // with the problems too when the prompt asks for them (one read)
+    const guide = {
+      sections: [{ heading: 'Mock section A', summary: 'A summary.', video: 'mock video', terms: [{ term: 'mole', def: 'An amount.' }], points: ['A point.'] },
+        { heading: 'Mock section B', summary: 'Another summary.', video: 'mock video', terms: [], points: ['Another point.'] }],
+      cards: [{ q: 'What is a mole?', a: 'an amount', accept: [], wrong: ['a mass', 'a volume', 'a charge'] }],
+    };
+    return p.includes('Find every problem') ? { ...guide, ...findProblems(p) } : guide;
+  }
   if (p.includes('Find every problem')) return findProblems(p);
   if (p.includes('name the textbook problems')) return { links: [] };
   if (p.includes('specific topics, rules')) return { topics: ['naming polyatomic ions', 'balancing equations', 'significant figures'] };
@@ -52,13 +60,6 @@ function answer(p) {
   if (p.includes('multiple-choice practice problems for the section')) {
     const k = +((p.match(/Write (\d+) multiple-choice/) || [])[1] || 3);
     return { problems: Array.from({ length: k }, (_, i) => ({ text: `Mock section question ${i + 1}?`, choices: ['one', 'two', 'three', 'four'], answer: 'two', steps: ['count'] })) };
-  }
-  if (p.includes('writing a study guide')) {
-    return {
-      sections: [{ heading: 'Mock section A', summary: 'A summary.', video: 'mock video', terms: [{ term: 'mole', def: 'An amount.' }], points: ['A point.'] },
-        { heading: 'Mock section B', summary: 'Another summary.', video: 'mock video', terms: [], points: ['Another point.'] }],
-      cards: [{ q: 'What is a mole?', a: 'an amount', accept: [], wrong: ['a mass', 'a volume', 'a charge'] }],
-    };
   }
   if (p.includes('YouTube search (4 to 7')) return { q: 'mock tutorial search words' };
   if (p.includes('Check the student')) return { verdict: 'error', where: 'line 1', procedure: 'mock rule', search: 'mock rule video', skill: null, note: 'Look again at line 1.' };
