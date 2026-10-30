@@ -19,6 +19,13 @@ const READ_TRIED = new Set(); // documents already read for problems this sessio
 async function loadSets() {
   try { SETS = await api('GET', `/api/classes/${CLASS.id}/sets`); } catch (e) { if (e.code === 'auth_required') throw e; SETS = []; }
 }
+// The number a question had in its book or exam: the one read out of it, or one at the start of its text ("21." or "Question 9:").
+const refOf = (p) => p.ref || ((String(p.text || '').match(/^\s*(?:problem|question|q)?\s*#?(\d+(?:\.\d+)?)(?:[.):]|\s+(?=[A-Z]))/i) || [])[1]) || '';
+// Where a question came from, for the screen: its source, its chapter and its number.
+function srcText(p, src) {
+  const s = src || (p.kind === 'similar' ? 'ai' : srcOf(p)), ch = chapterById(p.chapterId), ref = s === 'ai' ? '' : refOf(p);
+  return [s === 'ai' ? 'AI-written' : s === 'exam' ? 'Instructor’s exam' : 'From the text', ch ? ch.title : '', ref ? (s === 'exam' ? 'Question ' : 'Problem ') + ref : ''].filter(Boolean).join(' · ');
+}
 const srcOf = (p) => (p.kind === 'similar' ? 'ai' : (DOCS.find((d) => d.id === p.sourceDoc) || {}).tag === 'exam' ? 'exam' : 'book');
 // A saved set's problems as the exam and printout use them: the bank problem plus the set's own answer when the bank has none.
 const setProblems = (s) => s.items.map((it) => {

@@ -147,6 +147,13 @@ function openDb(dataDir) {
       PRAGMA user_version = 11;
     `);
   }
+  if (v < 12) {
+    // ref: the problem's number as printed in the book or exam ("21", "3.21"), so a question can say where it came from.
+    db.exec(`
+      ALTER TABLE problems ADD COLUMN ref TEXT NOT NULL DEFAULT '';
+      PRAGMA user_version = 12;
+    `);
+  }
   return db;
 }
 

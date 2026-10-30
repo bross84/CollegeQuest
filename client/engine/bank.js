@@ -125,7 +125,7 @@ async function readDocs(docs, tally) {
   for (const d of docs) {
     // Questions read before the app kept each question's format are replaced, so a multiple-choice question gets its options back.
     const old = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original');
-    if (old.length && old.every((p) => !p.format)) { await api('DELETE', `/api/docs/${d.id}/problems`); old.forEach((p) => seen.delete(normText(p.text))); }
+    if (old.length && old.every((p) => !p.format || !p.ref)) { await api('DELETE', `/api/docs/${d.id}/problems`); old.forEach((p) => seen.delete(normText(p.text))); }
     const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
     const parts = await docParts([d]);
     if (parts.length > MAX_PARTS) tally.cut = true;
@@ -138,7 +138,7 @@ async function readDocs(docs, tally) {
       topic = topic || String((r && r.topic) || '').slice(0, 80);
       (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
         const sh = shapeProblem(p), text = sh.text, k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
-        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
+        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, ref: String((p && p.number) || '').replace(/^\s*(problem|question|q|exercise)\s*#?\s*/i, '').trim().slice(0, 40), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
       });
     }
     for (let i = 0; i < Math.min(found.length, PER_DOC); i += 100) {
@@ -337,7 +337,7 @@ function renderExam() {
       : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</p></div>`
       : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
       : '<div class="fb"><p>No answer key for this one.</p></div>';
-    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.src ? ' &middot; ' + SRC_LABEL[p.src] : p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
+    return `<div class="prob exq"><div class="eyebrow">Question ${i + 1} &middot; ${esc(srcText(p, p.src))}</div><div class="qtext">${fmtMath(p.text)}</div>
       ${opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''} ${String(k) === EX.answers[i] ? 'chosen' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : `<div class="where">${mine ? esc(mine) : '(left blank)'}</div>`}${verdict}
       ${relatedHTML(p)}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}

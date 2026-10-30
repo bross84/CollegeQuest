@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 12);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 

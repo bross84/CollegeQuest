@@ -225,7 +225,7 @@ function renderQuiz() {
   if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</b></p>${stepsHTML(x)}<p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
   const help = st === 'ask' || (st === 'choices' && !Q.typed) ? '<div class="help"><button class="link" data-act="g-show">I don’t know this one</button></div>' : '';
   app.innerHTML = `<div class="rbar"><button class="link" data-act="${Q.path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
-  <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}${x.c.src ? ' &middot; ' + esc(x.c.src) : ''}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
+  <div class="prob"><div class="eyebrow">${[Q.path ? '' : x.g.title, x.c.topic, x.c.src].filter(Boolean).map(esc).join(' &middot; ')}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('gans');
   if (nb) nb.focus(); else if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
