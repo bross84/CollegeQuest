@@ -391,7 +391,15 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
   });
 
   // ---- problems: a chapter's problem bank (originals pulled from uploads, plus AI-made similar ones) ----
-  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), createdAt: r.created_at });
+  // A question's answer format and, for multiple choice, its options (at least two, or it is not multiple choice).
+  const FORMATS = ['mc', 'tf', 'fill', 'work'];
+  const shapeOf = (p) => {
+    const choices = (Array.isArray(p && p.choices) ? p.choices : []).map((x) => clip(x, 300)).filter(Boolean).slice(0, 8);
+    let format = FORMATS.includes(p && p.format) ? p.format : choices.length >= 2 ? 'mc' : '';
+    if (format === 'mc' && choices.length < 2) format = '';
+    return { format, choices: format === 'mc' ? choices : [] };
+  };
+  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), format: r.format || '', choices: JSON.parse(r.choices || '[]'), createdAt: r.created_at });
   api.get('/chapters/:id/problems', (req, res) => {
     const ch = needChapter(req, res); if (!ch) return;
     res.json(db.prepare('SELECT * FROM problems WHERE chapter_id = ? ORDER BY created_at, rowid').all(ch.id).map(problemOut));
@@ -399,14 +407,14 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
   api.post('/chapters/:id/problems', express.json({ limit: '4mb' }), (req, res) => {
     const ch = needChapter(req, res); if (!ch) return;
     const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body]).slice(0, 100);
-    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, format, choices, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const made = [];
     for (const p of list) {
       const text = clip(p && p.text, 4000);
       if (!text) continue;
-      const id = newId();
+      const id = newId(), shape = shapeOf(p);
       ins.run(id, ch.class_id, ch.id, clip(p.sourceDoc, 40), p.kind === 'similar' ? 'similar' : 'original', text, clip(p.answer, 500),
-        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), Date.now());
+        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), shape.format, JSON.stringify(shape.choices), Date.now());
       made.push(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(id)));
     }
     if (!made.length) return res.status(400).json({ error: 'No problems to save.' });
@@ -422,14 +430,14 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
     if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
     const list = (Array.isArray(req.body && req.body.problems) ? req.body.problems : [req.body])
     .slice(0, 200);
-    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const ins = db.prepare('INSERT INTO problems (id, class_id, chapter_id, source_doc, kind, text, answer, steps, topic, format, choices, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const made = [];
     for (const p of list) {
       const text = clip(p && p.text, 4000);
       if (!text) continue;
-      const id = newId();
+      const id = newId(), shape = shapeOf(p);
       ins.run(id, req.params.id, chapterOf(req.params.id, p.chapterId), clip(p.sourceDoc, 40), p.kind === 'similar' ? 'similar' : 'original', text, clip(p.answer, 500),
-        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), Date.now());
+        JSON.stringify((Array.isArray(p.steps) ? p.steps : []).map((x) => clip(x, 500)).filter(Boolean).slice(0, 20)), clip(p.topic, 120), shape.format, JSON.stringify(shape.choices), Date.now());
       made.push(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(id)));
     }
     if (!made.length) return res.status(400).json({ error: 'No problems to save.' });
@@ -452,6 +460,10 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
       : ch === 'none' ? db.prepare('DELETE FROM problems WHERE class_id = ? AND chapter_id IS NULL').run(req.params.id)
         : db.prepare('DELETE FROM problems WHERE class_id = ? AND chapter_id = ?').run(req.params.id, String(ch));
     res.json({ ok: true, removed: Number(r.changes) });
+  });
+  api.delete('/docs/:id/problems', (req, res) => { // the questions read out of one document (so it can be read again), not the AI-written ones
+    const d = getDoc(req, res); if (!d) return;
+    res.json({ ok: true, removed: db.prepare("DELETE FROM problems WHERE source_doc = ? AND kind = 'original'").run(d.id).changes });
   });
   api.delete('/problems/:id', (req, res) => {
     const r = db.prepare('DELETE FROM problems WHERE id = ?').run(req.params.id);

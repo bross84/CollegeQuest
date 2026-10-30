@@ -123,6 +123,9 @@ async function readDocs(docs, tally) {
   if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
   const seen = new Set(allProblems().map((p) => normText(p.text)));
   for (const d of docs) {
+    // Questions read before the app kept each question's format are replaced, so a multiple-choice question gets its options back.
+    const old = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original');
+    if (old.length && old.every((p) => !p.format)) { await api('DELETE', `/api/docs/${d.id}/problems`); old.forEach((p) => seen.delete(normText(p.text))); }
     const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
     const parts = await docParts([d]);
     if (parts.length > MAX_PARTS) tally.cut = true;
@@ -134,8 +137,8 @@ async function readDocs(docs, tally) {
       const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
       topic = topic || String((r && r.topic) || '').slice(0, 80);
       (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
-        const text = String((p && p.text) || '').trim(), k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
-        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: String((p && p.answer) || '').trim().slice(0, 500), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
+        const sh = shapeProblem(p), text = sh.text, k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
+        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
       });
     }
     for (let i = 0; i < Math.min(found.length, PER_DOC); i += 100) {
@@ -202,13 +205,13 @@ async function bankSimilar(origs, n, chId) {
       BK.note = origs.length > 1 ? `Writing similar problems… (${i + 1} of ${origs.length})` : 'Writing similar problems…'; paintBank();
       const ctx = await classContext(p.text, chId);
       const prompt = `${rules()}${ctx}\n\nWrite ${n} NEW practice problems like the one below: the same type of problem and the same difficulty, but with different numbers, names or wording. Do not copy the original.\n\n`
-        + `Original problem:\n${p.text}\n${p.answer ? `Its answer: ${p.answer}\n` : ''}\nWork each new problem out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\n`
-        + 'Reply with only this JSON:\n{"problems":[{"text":"the new problem","answer":"the final answer","steps":["one short step","one short step"]}]}';
+        + `Original problem:\n${p.text}\n${p.format === 'mc' ? `Its options: ${p.choices.join(' | ')}\n` : ''}${p.answer ? `Its answer: ${p.answer}\n` : ''}\n${p.format === 'mc' ? 'Each new problem is multiple choice too: four options, one correct and three believable wrong ones, listed in "choices" with the correct option’s text in "answer". ' : ''}Work each new problem out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\n`
+        + 'Reply with only this JSON:\n{"problems":[{"text":"the new problem","format":"work","choices":[],"answer":"the final answer","steps":["one short step","one short step"]}]}';
       const r = await aiJson(prompt, BK.ctl, bankWait(), 3000);
-      const made = (Array.isArray(r && r.problems) ? r.problems : []).slice(0, n).map((q) => ({
-        kind: 'similar', text: String((q && q.text) || '').trim(), answer: String((q && q.answer) || '').trim(),
+      const made = (Array.isArray(r && r.problems) ? r.problems : []).slice(0, n).map((q) => { const sh = mixChoices(shapeProblem(q)); return {
+        kind: 'similar', text: sh.text, answer: sh.answer, format: sh.format, choices: sh.choices,
         steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: p.topic, sourceDoc: p.sourceDoc, chapterId: p.chapterId,
-      })).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
+      }; }).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
       if (made.length) { await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: made }); added += made.length; }
     }
     await loadProblems();
@@ -260,7 +263,7 @@ async function bankAct(act, t) {
   if (act === 'b-xorig') { XS.orig = !XS.orig; return renderRoute(true); }
   if (act === 'b-exsubmit') return exSubmit();
   if (act === 'b-exleave') { exitExam(); return renderHome(); }
-  if (act === 'b-exopen') { const x = EX.items[+t.dataset.i], work = EX.answers[+t.dataset.i], ch = EX.chId; exitExam(); openProblem(x.id, 'bank', ch); W.work = work; return renderWork(); }
+  if (act === 'b-exopen') { const x = EX.items[+t.dataset.i], work = EX.answers[+t.dataset.i], ch = EX.chId; exitExam(); openProblem(x.id, 'bank', ch); W.work = optionsOf(x) && work !== '' ? optionsOf(x)[+work] : work; return renderWork(); }
 }
 
 // ---- practice exam: a timed set from the chapter's originals and AI-made problems ----
@@ -295,7 +298,12 @@ function exSubmit() {
   if (!EX || EX.done) return;
   clearInterval(EX.timer);
   EX.done = true;
-  EX.results = EX.items.map((p, i) => localMatch(p.answer, EX.answers[i].trim()));
+  EX.results = EX.items.map((p, i) => {
+    const opts = optionsOf(p);
+    if (!opts) return localMatch(p.answer, EX.answers[i].trim());
+    const key = keyIndex(p, opts);
+    return key < 0 || EX.answers[i] === '' ? null : +EX.answers[i] === key;
+  });
   renderExam();
 }
 // The textbook problems an instructor question was matched to, for extra practice on the same idea.
@@ -308,24 +316,29 @@ function renderExam() {
     app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
     <div class="prob"><div class="eyebrow">Practice exam &middot; ${esc(EX.label)}</div>
       <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
-      ${EX.items.map((p, i) => `<div class="exq"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div><div class="qtext">${fmtMath(p.text)}</div>
-        <textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea></div>`).join('')}
+      ${EX.items.map((p, i) => {
+        const opts = optionsOf(p);
+        return `<div class="exq"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div><div class="qtext">${fmtMath(p.text)}</div>
+        ${opts ? `<div class="opts" role="radiogroup" aria-label="Choices for question ${i + 1}">${opts.map((c, k) => `<label class="opt"><input type="radio" name="exq${i}" data-exc="${i}" value="${k}" ${EX.answers[i] === String(k) ? 'checked' : ''}><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></label>`).join('')}</div>`
+          : `<textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea>`}</div>`;
+      }).join('')}
       <div class="answer"><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>`;
     return;
   }
   const keyed = EX.results.filter((r) => r !== null), right = keyed.filter(Boolean).length, blank = EX.answers.filter((a) => !a.trim()).length;
+  const pickText = (p, i) => { const opts = optionsOf(p); return opts ? (EX.answers[i] === '' ? '' : `${'abcdefgh'[+EX.answers[i]]}) ${opts[+EX.answers[i]]}`) : EX.answers[i].trim(); };
   app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Back to the course</button></div>
   <div class="sum"><h1>Exam review</h1>
     ${keyed.length ? `<div class="big">${right} of ${keyed.length}</div><small>matched the answer key (${plural(EX.items.length - keyed.length, 'question')} had no key to compare with)</small>` : '<small>None of these questions had an answer key to compare with. Open each one in the checker to find out where you stand.</small>'}
     ${blank ? `<p class="lines">${plural(blank, 'question')} left blank.</p>` : ''}</div>
   ${EX.items.map((p, i) => {
-    const r = EX.results[i], mine = EX.answers[i].trim();
+    const r = EX.results[i], opts = optionsOf(p), mine = pickText(p, i), key = opts ? keyIndex(p, opts) : -1, keyText = key >= 0 ? `${'abcdefgh'[key]}) ${opts[key]}` : p.answer;
     const verdict = r === true ? '<div class="fb good"><p><b>Matches the key.</b></p></div>'
-      : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</p></div>`
-      : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(p.answer)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
+      : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</p></div>`
+      : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
       : '<div class="fb"><p>No answer key for this one.</p></div>';
     return `<div class="prob exq"><div class="eyebrow">Question ${i + 1}${p.src ? ' &middot; ' + SRC_LABEL[p.src] : p.kind === 'similar' ? ' &middot; AI-made' : ''}${chapterById(p.chapterId) ? ' &middot; ' + esc(chapterById(p.chapterId).title) : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
-      <div class="where">${mine ? esc(mine) : '(left blank)'}</div>${verdict}
+      ${opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''} ${String(k) === EX.answers[i] ? 'chosen' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : `<div class="where">${mine ? esc(mine) : '(left blank)'}</div>`}${verdict}
       ${relatedHTML(p)}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
       <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${PACK.videoWord}`.trim() || CLASS.name, true)}</div></div>`;
@@ -375,3 +388,4 @@ app.addEventListener('change', async (e) => {
   }
 });
 app.addEventListener('input', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exa !== undefined) EX.answers[+t.dataset.exa] = t.value; });
+app.addEventListener('change', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exc !== undefined && t.checked) EX.answers[+t.dataset.exc] = t.value; });

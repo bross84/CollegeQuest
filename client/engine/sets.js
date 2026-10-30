@@ -12,6 +12,7 @@ const SMIX = {
   book: { label: 'More from the text', exam: 20, book: 60, ai: 20 },
   fresh: { label: 'Mostly new problems', exam: 20, book: 30, ai: 50 },
 };
+const FMT_NAME = { mc: 'multiple choice', tf: 'true/false', fill: 'fill in the blank', work: 'written' };
 const SS = { xsize: 20, mix: 'like', tpl: null, focus: '', from: '', delId: null }; // tpl: the exam to model on; null until chosen, then defaults to the first exam
 const READ_TRIED = new Set(); // documents already read for problems this session, so a build doesn't read them again
 
@@ -172,10 +173,13 @@ async function buildSet(o) {
     const cand = [...shuffle(pool)].sort((a, b) => order(a) - order(b)).slice(0, 120);
     const multi = o.chapterIds.length > 1, letter = { exam: 'E', book: 'B', ai: 'A' };
     BK.note = 'Choosing the problems that cover the main ideas…'; paintBank();
-    const lines = cand.map((p, i) => `${i + 1}. [${letter[srcOf(p)]}${multi && chapterById(p.chapterId) ? ', ' + chapterById(p.chapterId).title : ''}] ${p.text.replace(/\s+/g, ' ').slice(0, 240)}`).join('\n');
+    const tplQs = o.tplId ? allProblems().filter((p) => p.kind === 'original' && p.sourceDoc === o.tplId) : [], fmtCount = {};
+    tplQs.forEach((p) => { const f = p.format || 'work'; fmtCount[f] = (fmtCount[f] || 0) + 1; });
+    const fmtLine = Object.keys(fmtCount).length > 1 ? `The model exam is ${Object.entries(fmtCount).map(([f, c]) => `${c} ${FMT_NAME[f]}`).join(', ')}; choose in about the same proportions (the tag after E, B or A shows each problem’s format). ` : '';
+    const lines = cand.map((p, i) => `${i + 1}. [${letter[srcOf(p)]}${p.format ? ', ' + p.format : ''}${multi && chapterById(p.chapterId) ? ', ' + chapterById(p.chapterId).title : ''}] ${p.text.replace(/\s+/g, ' ').slice(0, 240)}`).join('\n');
     const r = !nPick ? null : await aiJson(`${rules()}\n\nBelow are numbered practice problems for "${CLASS.name}". E = from the instructor’s practice exam, B = from the textbook, A = written by an AI. `
       + `Choose ${nPick} of them for a study set that captures the main ideas: cover every distinct topic, skip near-duplicates, and mix easy and hard. Aim for about ${nE} E and ${nB} B (take more of the other kind if one runs short; use A only if you must). `
-      + (multi ? 'The set spans several chapters; keep the same balance between chapters as the E problems have. ' : '')
+      + (multi ? 'The set spans several chapters; keep the same balance between chapters as the E problems have. ' : '') + fmtLine
       + 'Name each pick’s topic in 2 to 4 words.\n\nReply with only this JSON:\n{"picks":[{"n":1,"topic":"short topic"}]}\n\nProblems:\n' + lines, BK.ctl, bankWait(), 3000);
     const used = new Set(), picks = [];
     (Array.isArray(r && r.picks) ? r.picks : []).forEach((x) => { const i = (+(x && x.n) || 0) - 1; if (cand[i] && !used.has(i) && picks.length < nPick) { used.add(i); picks.push({ p: cand[i], topic: String((x && x.topic) || cand[i].topic || '').slice(0, 60) }); } });
@@ -188,14 +192,16 @@ async function buildSet(o) {
       const want = n - picks.length - made.length;
       if (want <= 0) break;
       BK.note = 'Writing new problems like the ones you’ll be tested on…'; paintBank();
-      const k = Math.min(want, 12), seen = new Set(allProblems().map((p) => normText(p.text)));
-      const models = picks.map((x, i) => `${i + 1}. [${letter[srcOf(x.p)]}] ${x.p.text.replace(/\s+/g, ' ').slice(0, 240)}${x.p.answer ? ` (answer: ${x.p.answer.slice(0, 60)})` : ''}`).join('\n');
+      const k = Math.min(want, 12), seen = new Set([...allProblems(), ...made].map((p) => normText(p.text)));
+      const models = picks.map((x, i) => `${i + 1}. [${letter[srcOf(x.p)]}, ${x.p.format || 'work'}] ${x.p.text.replace(/\s+/g, ' ').slice(0, 240)}${x.p.format === 'mc' ? ` (options: ${x.p.choices.join(' | ').slice(0, 240)})` : ''}${x.p.answer ? ` (answer: ${x.p.answer.slice(0, 60)})` : ''}`).join('\n');
       const v = await aiJson(`${rules()}\n\nBelow are numbered problems a student will be tested on. Write ${k} NEW practice problems, each modelled on one of them (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Spread them across different models, preferring the E ones. Do not copy any original. `
-        + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new problem","answer":"the final answer","steps":["one short step"]}]}\n\nProblems:\n${models}`, BK.ctl, bankWait(), 3500);
+        + 'Keep each model’s answer format (the word after its letter): a multiple-choice model gets a multiple-choice problem with four options, one correct and three believable wrong ones, listed in "choices" with the correct option’s text in "answer"; a written model gets a written problem with no options. '
+        + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new problem","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nProblems:\n${models}`, BK.ctl, bankWait(), 3500);
       const fresh = (Array.isArray(v && v.problems) ? v.problems : []).slice(0, k).map((q) => {
         const base = (picks[(+(q && q.like) || 1) - 1] || picks[0]).p;
-        return { kind: 'similar', text: String((q && q.text) || '').trim(), answer: String((q && q.answer) || '').trim(), steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: base.topic, sourceDoc: base.sourceDoc, chapterId: base.chapterId };
-      }).filter((q) => q.text && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
+        const sh = mixChoices(shapeProblem(q));
+        return { kind: 'similar', text: sh.text, answer: sh.answer, format: sh.format, choices: sh.choices, steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: base.topic, sourceDoc: base.sourceDoc, chapterId: base.chapterId, wasMc: base.format === 'mc' };
+      }).filter((q) => q.text && (q.format !== 'mc' || keyIndex(q, q.choices) >= 0) && (!q.wasMc || q.format === 'mc') && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
       if (!fresh.length) break;
       made.push(...await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: fresh }));
     }
@@ -205,13 +211,18 @@ async function buildSet(o) {
     if (keyless.length) {
       BK.note = 'Working out answers for problems that came without a key…'; paintBank();
       try {
-        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((x, i) => `${i + 1}. ${x.p.text.replace(/\s+/g, ' ').slice(0, 400)}`).join('\n')}`, BK.ctl, bankWait(), 2500);
+        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((x, i) => `${i + 1}. ${x.p.text.replace(/\s+/g, ' ').slice(0, 400)}${x.p.format === 'mc' ? ` Options: ${x.p.choices.join(' | ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
         (Array.isArray(kr && kr.answers) ? kr.answers : []).forEach((a) => { const x = keyless[(+(a && a.n) || 0) - 1]; if (x && a.answer) keys[x.p.id] = String(a.answer).slice(0, 500); });
       } catch (e) { if (e && e.code === 'cancelled') throw e; /* no keys: the review says so */ }
     }
 
     const items = [...picks.map((x) => ({ id: x.p.id, src: srcOf(x.p), key: x.p.answer ? '' : keys[x.p.id] || '' })), ...made.map((q) => ({ id: q.id, src: 'ai', key: '' }))];
-    const ordered = o.kind === 'exam' ? shuffle(items) : items;
+    // an exam modelled on one that has several formats keeps its order: its multiple-choice part first, and so on
+    const fmtById = {};
+    picks.forEach((x) => { fmtById[x.p.id] = x.p.format || 'work'; });
+    made.forEach((q) => { fmtById[q.id] = q.format || 'work'; });
+    const modelOrder = [...new Set(tplQs.map((p) => p.format || 'work'))], rankF = (it) => { const k = modelOrder.indexOf(fmtById[it.id] || 'work'); return k < 0 ? 99 : k; };
+    const ordered = o.kind === 'exam' ? (modelOrder.length > 1 ? shuffle(items).sort((a, b) => rankF(a) - rankF(b)) : shuffle(items)) : items;
     const set = await api('POST', `/api/classes/${CLASS.id}/sets`, { title: o.title, kind: o.kind, chapterIds: o.chapterIds, items: ordered });
     SETS.unshift(set);
     await loadProblems(); await loadChapters();
@@ -233,9 +244,10 @@ function printSet(id) {
   if (!s) return;
   const items = setProblems(s), w = window.open('', '_blank');
   if (!w) { BK.err = 'Allow pop-ups for this site to print.'; return renderRoute(true); }
-  const key = (p) => (p.answer ? esc(p.answer) + (p.kind === 'similar' || p.aiKey ? ' <i>(worked out by the AI)</i>' : '') : '<i>no key</i>');
-  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(s.title)}</title><style>body{font:15px/1.5 Georgia,serif;margin:36px;color:#111}h1{font-size:22px}h2{font-size:18px}li{margin:0 0 6px}.sp{height:130px}@page{margin:18mm}</style>
-    <h1>${esc(CLASS.name)}: ${esc(s.title)}</h1><ol>${items.map((p) => `<li>${fmtMath(p.text)}<div class="sp"></div></li>`).join('')}</ol>
+  const key = (p) => { const o = optionsOf(p), k = o ? keyIndex(p, o) : -1, a = k >= 0 ? `${'abcdefgh'[k]}) ${o[k]}` : p.answer; return a ? esc(a) + (p.kind === 'similar' || p.aiKey ? ' <i>(worked out by the AI)</i>' : '') : '<i>no key</i>'; };
+  const body = (p) => { const o = optionsOf(p); return `${fmtMath(p.text)}${o ? `<ol class="o">${o.map((c) => `<li>${fmtMath(c)}</li>`).join('')}</ol>` : '<div class="sp"></div>'}`; };
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(s.title)}</title><style>body{font:15px/1.5 Georgia,serif;margin:36px;color:#111}h1{font-size:22px}h2{font-size:18px}li{margin:0 0 6px}.sp{height:130px}ol.o{list-style:lower-alpha;margin:6px 0 10px 1.2em}@page{margin:18mm}</style>
+    <h1>${esc(CLASS.name)}: ${esc(s.title)}</h1><ol>${items.map((p) => `<li>${body(p)}</li>`).join('')}</ol>
     <h2 style="page-break-before:always">Answer key</h2><ol>${items.map((p) => `<li>${key(p)}</li>`).join('')}</ol>`);
   w.document.close(); w.focus(); setTimeout(() => w.print(), 250);
 }

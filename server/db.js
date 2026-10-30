@@ -129,6 +129,15 @@ function openDb(dataDir) {
       PRAGMA user_version = 9;
     `);
   }
+  if (v < 10) {
+    // format: how a question is answered ('mc' multiple choice, 'tf' true/false, 'fill' blanks, 'work' show your work, '' unknown);
+    // choices: the options of a multiple-choice question, so a generated exam can ask it the same way.
+    db.exec(`
+      ALTER TABLE problems ADD COLUMN format TEXT NOT NULL DEFAULT '';
+      ALTER TABLE problems ADD COLUMN choices TEXT NOT NULL DEFAULT '[]';
+      PRAGMA user_version = 10;
+    `);
+  }
   return db;
 }
 

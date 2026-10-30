@@ -31,12 +31,13 @@ const nextAfter = (p) => { const l = pathList(), k = l.findIndex((x) => x.g.id =
 // Problems from the bank that match the section and have a short answer a typed reply can be checked against.
 function sectionProblems(p) {
   const chId = p.ch.unsorted ? null : p.ch.id;
-  const pool = allProblems().filter((q) => q.kind === 'original' && q.answer && q.answer.length <= 60 && q.text.length <= 240
+  const mc = (q) => q.format === 'mc' && q.choices.length >= 2 && keyIndex(q, q.choices) >= 0;
+  const pool = allProblems().filter((q) => q.kind === 'original' && (mc(q) || (q.answer && q.answer.length <= 60 && !q.choices.length)) && q.text.length <= 240
     && (chId ? q.chapterId === chId : !q.chapterId) && ((cardRec('p:' + q.id) || {}).box || 0) < 2);
   if (!pool.length) return [];
   const about = `${p.sec.heading} ${p.sec.summary} ${p.sec.terms.map((t) => t.term).join(' ')}`;
   const pseudo = { id: p.g.id, title: p.g.title, sections: p.g.sections, cards: pool.map((q) => ({ a: cleanGlyphs(q.answer) })) }; // wrong choices come from other problems' answers
-  return shortlist([{ text: about }], pool, 2)[0].map((q) => ({ g: pseudo, c: { q: cleanGlyphs(q.text.replace(/\s+/g, ' ')), a: cleanGlyphs(q.answer), accept: [], wrong: [], topic: p.sec.heading }, i: 0, id: 'p:' + q.id }));
+  return shortlist([{ text: about }], pool, 2)[0].map((q) => { const right = mc(q) ? q.choices[keyIndex(q, q.choices)] : q.answer; return { g: pseudo, c: { q: cleanGlyphs(q.text.replace(/\s+/g, ' ')), a: cleanGlyphs(right), accept: [], wrong: mc(q) ? q.choices.filter((c) => c !== right).map(cleanGlyphs) : [], topic: p.sec.heading }, i: 0, id: 'p:' + q.id }; });
 }
 
 // ---- walking a section ----
@@ -61,8 +62,8 @@ async function startSectionQuiz(gid, i) {
   if (!PLOADED) await loadProblems().catch(() => {});
   const items = shuffle([...shuffle(p.cards).slice(0, 6), ...sectionProblems(p)]);
   round = null; W.id = null;
-  Q = { guideId: gid, chapterId: p.ch.unsorted ? null : p.ch.id, path: { gid, i }, askOpen: false, items, i: 0, results: [], extra: false, state: 'ask', typed: '', choices: null, ans: -1, wrong: [], tries: 0 };
-  renderQuiz();
+  Q = { guideId: gid, chapterId: p.ch.unsorted ? null : p.ch.id, path: { gid, i }, askOpen: false, items, i: 0, results: [], extra: false };
+  qOpen(); renderQuiz();
 }
 // Reads the chapter's documents into a study guide in one go, then lands on the chapter's sections.
 function prepareChapter(chId) {

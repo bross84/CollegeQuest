@@ -233,8 +233,8 @@ function toChoice(p) {
   return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: m.choices, answer: m.answer };
 }
 // Answer style: 'both' = type first (choices appear after a miss), 'type' = typed only, 'choice' = multiple choice only.
-const STYLES = ['both', 'type', 'choice'];
-const STYLE_LABEL = { both: 'Answers: type first, choices after a miss', type: 'Answers: typed only', choice: 'Answers: multiple choice only' };
+const STYLES = ['both', 'type'];
+const STYLE_LABEL = { both: 'Answers: multiple choice', type: 'Answers: type first, choices after a miss', choice: 'Answers: multiple choice' };
 // A choice-only problem can carry a `typed` alternative ({ type, check or accept, hint, ... }). Used when answers are typed;
 // the original choices are kept in `alt` so a miss can still fall back to them.
 const asTyped = (p) => (p.type === 'choice' && p.typed ? { ...p, ...p.typed, q: p.q + (p.typed.hint || ''), alt: { choices: p.choices, answer: p.answer } } : p);

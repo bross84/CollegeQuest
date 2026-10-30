@@ -522,3 +522,15 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .tile.working { border-color: var(--accent); }
 .tile.done { border-color: var(--good); }
 .tile.done small { color: var(--good); }
+.opts { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.opt { display: flex; gap: 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; line-height: 1.5; }
+.opt:hover { border-color: var(--accent); }
+.opt input { margin-top: .25em; flex: none; }
+.opt .ol { font-weight: 600; color: var(--muted); flex: none; }
+div.opt { cursor: default; }
+div.opt:hover { border-color: var(--line); }
+.opt.key { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--card)); }
+.opt.chosen:not(.key) { border-color: #c2410c; }
+.opt.chosen::after { content: 'your answer'; margin-left: auto; font-size: .75rem; color: var(--muted); white-space: nowrap; }
+.opt > span:not(.ol) { flex: 1 1 0; min-width: 0; }
+.opt.chosen::after { flex: none; }

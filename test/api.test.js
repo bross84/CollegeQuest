@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 9);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 10);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -424,4 +424,19 @@ test('cleanGlyphs turns Symbol-font characters into real ones and arrows on reac
   assert.strictEqual(cleanGlyphs('Li (s) + Br (l) � LiBr'), 'Li (s) + Br (l) → LiBr');
   assert.strictEqual(cleanGlyphs('x  3, '), 'x ± 3, α');
   assert.strictEqual(cleanGlyphs('plain text'), 'plain text');
+});
+
+test('problems keep their answer format and options, and one document\'s questions can be cleared', async () => {
+  const c = (await call('POST', '/api/classes', { name: 'FMT 1', pack: 'general' })).data;
+  const note = (await call('POST', `/api/classes/${c.id}/notes`, { name: 'Exam', text: 'Q1 ...' })).data;
+  const made = (await call('POST', `/api/classes/${c.id}/problems`, { problems: [
+    { text: 'Pick the ion', kind: 'original', sourceDoc: note.id, choices: ['NO3-', 'Na+', '', 'Cl-'], answer: 'NO3-' },
+    { text: 'Lonely choice', kind: 'original', sourceDoc: note.id, format: 'mc', choices: ['only one'] },
+    { text: 'Show your work', kind: 'original', sourceDoc: note.id, format: 'work', choices: ['ignored'] },
+    { text: 'AI-written', kind: 'similar', sourceDoc: note.id, format: 'bogus' },
+  ] })).data;
+  assert.deepStrictEqual(made.map((p) => [p.format, p.choices]), [['mc', ['NO3-', 'Na+', 'Cl-']], ['', []], ['work', []], ['', []]]);
+  const gone = (await call('DELETE', `/api/docs/${note.id}/problems`)).data;
+  assert.strictEqual(gone.removed, 3, 'its originals go, the AI-written one stays');
+  assert.strictEqual((await call('GET', `/api/classes/${c.id}/problems`)).data.length, 1);
 });

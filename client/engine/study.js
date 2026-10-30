@@ -187,12 +187,19 @@ function pickCards(guideId, chapterId) {
   if (!q.length) { q = shuffle(pool).slice(0, GROUND); extra = true; }
   return { q: shuffle(q), extra };
 }
+// The first screen of the current question: its choices straight away (seeing the options helps recall), or a typed
+// answer first when the class is set to typing.
+function qOpen() {
+  const base = { typed: '', wrong: [], tries: 0, fb: null };
+  if (S.style === 'type') return Object.assign(Q, base, { state: 'ask', choices: null, ans: -1 });
+  Object.assign(Q, base, { state: 'choices' }, buildChoices(Q.items[Q.i]));
+}
 function startQuiz(guideId, chapterId) {
   const { q, extra } = pickCards(guideId, chapterId);
   if (!q.length) { GB.err = ''; return renderHome(); }
   round = null; W.id = null;
-  Q = { guideId, chapterId: chapterId || null, askOpen: false, items: q, i: 0, results: [], extra, state: 'ask', typed: '', choices: null, ans: -1, wrong: [], tries: 0 };
-  renderQuiz();
+  Q = { guideId, chapterId: chapterId || null, askOpen: false, items: q, i: 0, results: [], extra };
+  qOpen(); renderQuiz();
 }
 function buildChoices(x) {
   const a = x.c.a, seen = new Set([a.toLowerCase()]), w = [];
@@ -212,10 +219,10 @@ function renderQuiz() {
       ${locked ? '' : '<button class="btn" type="submit">Check</button>'}</form>`;
   }
   let fb = '';
-  if (st === 'choices') fb = `<div class="fb no" role="status"><p>${Q.typed ? `You typed <b>${esc(Q.typed)}</b>. ` : ''}Pick the right one from these choices.</p>${Q.typed ? '<div class="acts"><button class="link" data-act="g-mine">My answer was right</button></div>' : ''}</div>`;
+  if (st === 'choices' && Q.typed) fb = `<div class="fb no" role="status"><p>You typed <b>${esc(Q.typed)}</b>. Pick the right one from these choices.</p><div class="acts"><button class="link" data-act="g-mine">My answer was right</button></div></div>`;
   if (st === 'right') fb = `<div class="fb good" role="status"><h3>${Q.fb === 'first' ? 'Correct.' : 'Correct on the retry.'}</h3><p>${esc(x.c.a)}</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, true)}</div></div>`;
   if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${esc(x.c.a)}</b></p><p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
-  const help = st === 'ask' ? '<div class="help"><button class="link" data-act="g-show">I don’t know this one</button></div>' : '';
+  const help = st === 'ask' || (st === 'choices' && !Q.typed) ? '<div class="help"><button class="link" data-act="g-show">I don’t know this one</button></div>' : '';
   app.innerHTML = `<div class="rbar"><button class="link" data-act="g-home">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
   <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}</div><div class="qtext">${esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('gans');
@@ -252,7 +259,7 @@ function gAnswer() {
 }
 function gShow() { if (!Q.choices) Object.assign(Q, buildChoices(Q.items[Q.i])); gFinishCard('miss'); }
 function gPick(i) {
-  if (i === Q.ans) return gFinishCard('retry');
+  if (i === Q.ans) return gFinishCard(Q.tries || Q.wrong.length ? 'retry' : 'first');
   Q.wrong.push(i);
   if (Q.wrong.length >= 2) return gFinishCard('miss');
   renderQuiz();
@@ -260,7 +267,7 @@ function gPick(i) {
 function gNext() {
   Q.i++;
   if (Q.i >= Q.items.length) return renderQuizSummary();
-  Object.assign(Q, { state: 'ask', typed: '', choices: null, ans: -1, wrong: [], tries: 0, fb: null, askOpen: false });
+  Q.askOpen = false; qOpen();
   renderQuiz();
 }
 function renderQuizSummary() {
