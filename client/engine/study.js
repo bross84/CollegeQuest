@@ -225,12 +225,12 @@ function renderQuiz() {
   if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</b></p>${stepsHTML(x)}<p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
   const help = st === 'ask' || (st === 'choices' && !Q.typed) ? '<div class="help"><button class="link" data-act="g-show">I don’t know this one</button></div>' : '';
   app.innerHTML = `<div class="rbar"><button class="link" data-act="${Q.path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
-  <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
+  <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}${x.c.src ? ' &middot; ' + esc(x.c.src) : ''}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('gans');
   if (nb) nb.focus(); else if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
 // The worked steps of a problem, shown with its answer.
-const stepsHTML = (x) => (x.c.steps && x.c.steps.length ? `<ol class="steps">${x.c.steps.map((t) => `<li>${fmtMath(t)}</li>`).join('')}</ol>` : '');
+const stepsHTML = (x) => (x.c.steps && x.c.steps.length ? `<ol class="steps">${x.c.steps.map((t) => `<li>${fmtMath(t)}</li>`).join('')}</ol>` : '') + (x.c.aiKey ? '<small>The AI worked out this answer, so double-check it.</small>' : '');
 // After a card is answered: ask the tutor about it, and watch a video on the topic.
 const quizHelpHTML = (x, lazy) => `${smp ? `<button class="link" data-act="follow">${Q.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>` : ''}${videosHTML(cardVideoQ(x), lazy)}`;
 // kind: 'first' (typed it right), 'retry' (right from the choices), 'miss' (had to be shown)

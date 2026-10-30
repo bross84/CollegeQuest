@@ -18,11 +18,21 @@ function pathList() {
   return out;
 }
 const pathAt = (gid, i) => pathList().find((p) => p.g.id === gid && p.i === i);
-// Problems written for a section are kept in the bank (AI-written, multiple choice, topic = the section's heading), so each is asked once.
+// A section's practice comes straight from your textbook: its problems that test the section are picked once (by the AI, from the
+// closest matches) and remembered in S.secpick, word for word. Exam questions are not used here; they are modelled when you build an exam. AI-written problems (kept in the bank, topic = the section's
+// heading) are only a fallback when fewer than three real ones fit.
+const secKey = (p) => `${p.g.id}:${p.i}`;
+const secPicks = (p) => (((S.secpick || {})[secKey(p)]) || []).map((id) => allProblems().find((q) => q.id === id)).filter(Boolean);
+// The right answer and the wrong ones a problem can be practised with, or null when it has no way to be asked as multiple choice.
+function playOpts(q) {
+  if (q.format === 'mc' && q.choices.length >= 2) { const k = keyIndex(q, q.choices); return k < 0 ? null : { right: q.choices[k], wrongs: q.choices.filter((x, i) => i !== k) }; }
+  return q.answer && q.wrong.length >= 2 ? { right: q.answer, wrongs: q.wrong } : null;
+}
 const secBank = (p) => { const chId = p.ch.unsorted ? null : p.ch.id; return allProblems().filter((q) => q.kind === 'similar' && q.format === 'mc' && q.topic === p.sec.heading && (chId ? q.chapterId === chId : !q.chapterId)); };
-const secItems = (p) => [...p.cards.map((x) => x.id), ...secBank(p).map((q) => 'p:' + q.id)];
-// 'new' = not started (or nothing written yet); 'working' = some missed or unseen; 'done' = everything asked so far answered right at least once;
-// 'read' = nothing to ask and no AI to write problems
+const secReal = (p) => [...secPicks(p).filter(playOpts), ...secBank(p)];
+const secItems = (p) => (secReal(p).length ? secReal(p).map((q) => 'p:' + q.id) : p.cards.map((x) => x.id));
+// 'new' = not started (or no problems picked yet); 'working' = some missed or unseen; 'done' = all answered right at least once;
+// 'read' = nothing to ask and no AI to pick problems
 function secState(p) {
   const ids = secItems(p);
   if (!ids.length) return smp ? 'new' : 'read';
@@ -34,15 +44,44 @@ const todo = (p) => { const s = secState(p); return s === 'new' || s === 'workin
 const nextAfter = (p) => { const l = pathList(), k = l.findIndex((x) => x.g.id === p.g.id && x.i === p.i); return l.slice(k + 1).find(todo) || null; };
 const secNote = (p) => { const n = secItems(p).length; return n ? plural(n, 'question') : smp ? 'practice problems' : 'reading only'; };
 
-// A bank problem as a quiz item: its options, the worked steps to show after it, and the formatting problems need.
+// A bank problem as a quiz item: the question as written, its options, and where it came from.
 function problemItem(q, p, pseudo) {
-  const right = q.choices[keyIndex(q, q.choices)], tidy = (t) => cleanGlyphs(String(t).replace(/\s+/g, ' '));
-  return { g: pseudo, c: { q: tidy(q.text), a: tidy(right), accept: [], wrong: q.choices.filter((x) => x !== right).map(tidy), topic: p.sec.heading, steps: q.steps || [], rich: true, fixed: refersToOthers(q.choices) ? q.choices.map(tidy) : null }, i: 0, id: 'p:' + q.id };
+  const o = playOpts(q), tidy = (t) => cleanGlyphs(String(t).replace(/\s+/g, ' '));
+  const fixed = q.format === 'mc' && refersToOthers(q.choices) ? q.choices.map(tidy) : null;
+  return { g: pseudo, c: { q: tidy(q.text), a: tidy(o.right), accept: [], wrong: o.wrongs.map(tidy), topic: p.sec.heading, steps: q.steps || [], rich: true, fixed, aiKey: q.kind === 'similar' || q.aiKey, src: q.kind === 'similar' ? 'AI-written' : SRC_LABEL[srcOf(q)] }, i: 0, id: 'p:' + q.id };
+}
+// Looks through the problems read from your exams and text for the ones that test this section and remembers them. The AI chooses
+// among the closest matches and writes the wrong options (and an answer when the material gave none); the questions stay as written.
+async function pickSectionProblems(p, onNote) {
+  const chId = p.ch.unsorted ? null : p.ch.id, pool = allProblems().filter((q) => q.kind === 'original' && (chId ? q.chapterId === chId : !q.chapterId) && srcOf(q) !== 'exam' && q.text.length <= 800); // exam questions are for building exams, not for section practice
+  const terms = p.sec.terms.map((t) => t.term).join(', ');
+  let cand = pool.length ? shortlist([{ text: `${p.sec.heading} ${p.sec.summary} ${terms}` }], pool, 10)[0] : [];
+  if (cand.length < 12) cand = [...cand, ...pool.filter((q) => !cand.includes(q))].slice(0, 12); // little word overlap: let the AI choose from the chapter's problems
+  const picked = [];
+  if (cand.length) {
+    const line = (q, i) => `${i + 1}. [${q.format === 'mc' ? 'multiple choice' : 'written'}] ${q.text.replace(/\s+/g, ' ').slice(0, 400)}${q.format === 'mc' ? ` (options: ${q.choices.join(' | ').slice(0, 300)})` : ''} ${q.answer ? `(answer: ${q.answer.slice(0, 80)})` : '(no answer given)'}`;
+    const prompt = `${rules()}\n\nA student is practising the section "${p.sec.heading}" of "${CLASS.name}". ${p.sec.summary ? `The section says: ${p.sec.summary} ` : ''}Below are numbered problems from their own textbook and class materials. `
+      + 'Pick up to 5 that really test this section (leave out any about other topics), best first. For every pick that is written (not multiple choice), give "wrong": three believable wrong answers, the mistakes students really make, in the same form as the correct answer. '
+      + 'Where a problem says "(no answer given)", also give "answer": the correct answer, worked out carefully (for multiple choice, the text of the correct option). Do not change the problems.\n\n'
+      + `Reply with only this JSON:\n{"picks":[{"n":1,"wrong":["wrong answer","wrong answer","wrong answer"],"answer":""}]}\n\nProblems:\n${cand.map(line).join('\n')}`;
+    const r = await aiJson(prompt, new AbortController(), (n) => onNote(`Waiting for the AI quota (${n}s)…`), 2500);
+    for (const x of Array.isArray(r && r.picks) ? r.picks : []) {
+      const q = cand[(+(x && x.n) || 0) - 1];
+      if (!q || picked.includes(q)) continue;
+      const body = {}, wrong = (Array.isArray(x.wrong) ? x.wrong : []).map((w) => String(w).trim()).filter((w) => w && w.toLowerCase() !== String(q.answer || '').toLowerCase());
+      if (q.format !== 'mc' && wrong.length >= 2) body.wrong = wrong.slice(0, 4);
+      if (!q.answer && String((x && x.answer) || '').trim()) body.answer = String(x.answer).trim();
+      if (Object.keys(body).length) await api('PATCH', `/api/problems/${q.id}`, body);
+      picked.push(q);
+    }
+    await loadProblems();
+  }
+  if (picked.length) { (S.secpick || (S.secpick = {}))[secKey(p)] = picked.map((q) => q.id); save(); } // nothing found: try again next time, after more is read
 }
 // Writes n new multiple-choice problems for a section, modelled on the problems from your own exams and text that are closest to it,
 // and saves them in the bank. Returns the saved problems.
 async function writeSectionProblems(p, n, onNote) {
-  const chId = p.ch.unsorted ? null : p.ch.id, pool = allProblems().filter((q) => q.kind === 'original' && (chId ? q.chapterId === chId : !q.chapterId));
+  const chId = p.ch.unsorted ? null : p.ch.id, pool = allProblems().filter((q) => q.kind === 'original' && (chId ? q.chapterId === chId : !q.chapterId) && srcOf(q) !== 'exam');
   const terms = p.sec.terms.map((t) => t.term).join(', '), about = `${p.sec.heading} ${p.sec.summary} ${terms}`;
   const models = pool.length ? shortlist([{ text: about }], pool, 5)[0] : [], ctx = await classContext(`${p.sec.heading} ${terms}`, chId);
   const prompt = `${rules()}${ctx}\n\nWrite ${n} multiple-choice practice problems for the section "${p.sec.heading}" of "${CLASS.name}". ${p.sec.summary ? `The section says: ${p.sec.summary} ` : ''}${p.sec.points.length ? `Key points: ${p.sec.points.join(' ')} ` : ''}`
@@ -93,17 +132,28 @@ async function startSectionQuiz(gid, i) {
   if (!p) return renderHome();
   round = null; W.id = null; Q = null;
   if (!PLOADED) await loadProblems().catch(() => {});
+  const show = (title, note) => { app.innerHTML = `<div class="rbar"><span class="progress">${esc(p.sec.heading)}</span></div><div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">${esc(title)}</h2><p class="lead">${esc(note)}</p></div>`; };
+  let problem = '';
+  if (!((S.secpick || {})[secKey(p)] || []).length && smp) { // first time here: find the questions in your materials that test this section
+    show('Finding your questions on this…', 'Looking through the problems in your textbook for the ones that test this section. This takes a few seconds.');
+    try { await pickSectionProblems(p, (n) => show('Finding your questions on this…', n)); } catch (e) { problem = mineErr(e); }
+  }
   const unseen = (q) => ((cardRec('p:' + q.id) || {}).box || 0) < 1; // never asked, or missed last time
-  let probs = shuffle(secBank(p).filter(unseen)).slice(0, 5), problem = '';
-  if (probs.length < 5 && smp) {
-    const show = (note) => { app.innerHTML = `<div class="rbar"><span class="progress">${esc(p.sec.heading)}</span></div><div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">Writing problems for this section…</h2><p class="lead">${esc(note)}</p></div>`; };
-    show('Looking at the problems from your exams and text that are closest to it. This takes a few seconds.');
-    try { probs = [...probs, ...await writeSectionProblems(p, 5 - probs.length, show)]; } catch (e) { problem = mineErr(e); }
+  const real = secPicks(p).filter(playOpts);
+  let probs = shuffle(real.filter(unseen)).slice(0, 5);
+  if (!probs.length && real.length) probs = shuffle(real).slice(0, 5); // all got right already: go through them again
+  if (real.length < 3 && smp) { // too few of your own questions fit: AI-written ones fill in, and are labelled
+    let have = shuffle(secBank(p).filter(unseen)).slice(0, 5 - probs.length);
+    if (probs.length + have.length < 3) {
+      show('Writing problems for this section…', 'Few of your own questions fit this section, so the AI writes some like them.');
+      try { have = [...have, ...await writeSectionProblems(p, 5 - probs.length - have.length, (n) => show('Writing problems for this section…', n))]; } catch (e) { problem = problem || mineErr(e); }
+    }
+    probs = [...probs, ...have];
   }
   const pseudo = { id: p.g.id, title: p.g.title, sections: p.g.sections, cards: [] };
-  const items = [...probs.map((q) => problemItem(q, p, pseudo)), ...shuffle(p.cards).slice(0, Math.max(0, 6 - probs.length))];
+  const items = [...probs.map((q) => problemItem(q, p, pseudo)), ...(probs.length < 5 ? shuffle(p.cards).slice(0, 5 - probs.length) : [])];
   if (!items.length) {
-    app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Back</button></div><div class="prob"><h2 class="gtitle">Nothing to practise yet</h2><p class="lead">${esc(problem || 'This section has no questions, and the AI isn’t set up to write any.')}</p></div>`;
+    app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Back</button></div><div class="prob"><h2 class="gtitle">Nothing to practise yet</h2><p class="lead">${esc(problem || 'No problem in your textbook fits this section yet. Use “Read its problems” on the chapter’s materials, then try again.')}</p></div>`;
     return;
   }
   pseudo.cards = items.map((x) => x.c);

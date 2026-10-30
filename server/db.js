@@ -138,6 +138,15 @@ function openDb(dataDir) {
       PRAGMA user_version = 10;
     `);
   }
+  if (v < 11) {
+    // wrong: believable wrong answers the AI wrote for a question, so a real exam or textbook question can be practised as multiple choice;
+    // ai_key: 1 when the answer was worked out by the AI because the material gave none.
+    db.exec(`
+      ALTER TABLE problems ADD COLUMN wrong TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE problems ADD COLUMN ai_key INTEGER NOT NULL DEFAULT 0;
+      PRAGMA user_version = 11;
+    `);
+  }
   return db;
 }
 

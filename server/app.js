@@ -399,7 +399,7 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
     if (format === 'mc' && choices.length < 2) format = '';
     return { format, choices: format === 'mc' ? choices : [] };
   };
-  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), format: r.format || '', choices: JSON.parse(r.choices || '[]'), createdAt: r.created_at });
+  const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), format: r.format || '', choices: JSON.parse(r.choices || '[]'), wrong: JSON.parse(r.wrong || '[]'), aiKey: !!r.ai_key, createdAt: r.created_at });
   api.get('/chapters/:id/problems', (req, res) => {
     const ch = needChapter(req, res); if (!ch) return;
     res.json(db.prepare('SELECT * FROM problems WHERE chapter_id = ? ORDER BY created_at, rowid').all(ch.id).map(problemOut));
@@ -451,6 +451,8 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
       const mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(p.class_id).map((r) => r.id));
       db.prepare('UPDATE problems SET links = ? WHERE id = ?').run(JSON.stringify(req.body.links.filter((x) => mine.has(x) && x !== p.id).slice(0, 5)), p.id);
     }
+    if (req.body && Array.isArray(req.body.wrong)) db.prepare('UPDATE problems SET wrong = ? WHERE id = ?').run(JSON.stringify(req.body.wrong.map((x) => clip(x, 300)).filter(Boolean).slice(0, 6)), p.id);
+    if (req.body && typeof req.body.answer === 'string' && !p.answer && clip(req.body.answer, 500)) db.prepare('UPDATE problems SET answer = ?, ai_key = 1 WHERE id = ?').run(clip(req.body.answer, 500), p.id); // only fills a missing key
     res.json(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(p.id)));
   });
   api.delete('/classes/:id/problems', (req, res) => { // ?chapter=<id> clears one chapter, ?chapter=none the unfiled ones, no query clears them all
