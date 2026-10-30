@@ -9,7 +9,7 @@ let ROUTE = null;      // the route on screen: { cid, view, chId, tab, gid, chap
 let TUTOR_CTX = null;  // set while a saved chat panel is on screen: { id, title }
 const SB = { adding: false, err: '' };
 const CH = { delArmed: false };
-const TABS = [['materials', 'Materials'], ['guide', 'Guide'], ['practice', 'Practice'], ['tutor', 'Tutor']];
+const TABS = [['learn', 'Learn'], ['materials', 'Materials'], ['guide', 'Guide'], ['practice', 'Practice'], ['tutor', 'Tutor']];
 const UNSORTED = { id: 'unsorted', title: 'Unsorted', unsorted: true };
 
 async function loadChapters() {
@@ -25,13 +25,13 @@ const curChapterId = () => (W.id && W.src === 'bank' ? W.chId : Q ? (Q.chapterId
 
 // ---- routes ----
 const baseHash = () => '#/class/' + CLASS.id;
-const chHash = (chId, tab, gid) => `${baseHash()}/ch/${chId}/${tab || 'materials'}${gid ? '/' + gid : ''}`;
+const chHash = (chId, tab, gid) => `${baseHash()}/ch/${chId}/${tab || 'learn'}${gid ? '/' + gid : ''}`;
 const routeHash = (view) => (view === 'overview' ? baseHash() : `${baseHash()}/${view}`);
 function parseRoute() {
   const m = location.hash.match(/^#\/class\/(\w+)(?:\/(.*))?$/);
   if (!m) return null;
   const p = (m[2] || '').split('/').filter(Boolean), r = { cid: m[1], view: 'overview' };
-  if (p[0] === 'ch' && p[1]) { r.view = 'chapter'; r.chId = p[1]; r.tab = TABS.some((t) => t[0] === p[2]) ? p[2] : 'materials'; r.gid = p[2] === 'guide' ? p[3] : undefined; }
+  if (p[0] === 'ch' && p[1]) { r.view = 'chapter'; r.chId = p[1]; r.tab = TABS.some((t) => t[0] === p[2]) ? p[2] : 'learn'; r.gid = p[2] === 'guide' ? p[3] : undefined; }
   else if (p[0] === 'guide' && p[1]) { r.view = 'guide'; r.gid = p[1]; }
   else if (p[0] === 'search') { r.view = 'search'; try { r.q = decodeURIComponent(p.slice(1).join('/')); } catch (e) { r.q = ''; } }
   else if (['docs', 'hw', 'sets', 'exams'].includes(p[0])) r.view = p[0];
@@ -101,7 +101,7 @@ function sidebarHTML(active) {
     <div class="slabel">Class</div>
     ${a('hw', routeHash('hw'), 'Homework', countPill(openHw))}
     ${SKILLS.length ? a('sets', routeHash('sets'), 'Practice sets') : ''}
-    ${a('exams', routeHash('exams'), 'Practice exams')}
+    ${a('exams', routeHash('exams'), 'Exams')}
     ${a('docs', routeHash('docs'), 'All documents', countPill(DOCS.length))}
     <div class="sfoot"><button class="link" data-act="c-edit" data-id="${CLASS.id}">Class settings</button></div>
   </nav>`;
@@ -113,7 +113,7 @@ function pickerHTML(active) {
     <select class="line" id="cpick" aria-label="Go to">
       ${opt('overview', baseHash(), 'Overview')}
       <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title) + (chapterDue(c.id) ? ` (${chapterDue(c.id)} due)` : ''))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
-      <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Practice exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
+      <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
     </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}</div>`;
 }
 function shell(active, main) {
@@ -146,6 +146,7 @@ function overviewHTML() {
   const tutor = `<section class="zone"><h3>Ask the tutor</h3>${followHTML({ title: 'About the whole course', placeholder: `Ask anything about ${CLASS.name}…` })}</section>`;
   return `<h1 class="ptitle">${esc(CLASS.name)}</h1>
   ${examHTML()}
+  ${continueHTML()}
   <div class="ovcols"><div class="ovcol">${due}${SKILLS.length ? todayHTML() + coachHTML() : ''}${tutor}</div><div class="ovcol">${chapters}</div></div>
   <div class="foot"><span>${standLine()} <small id="syncnote">${syncNote()}</small></span>
     <span>${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
@@ -153,12 +154,12 @@ function overviewHTML() {
 
 // ---- chapter page ----
 function chapterHTML(r) {
-  const ch = r.chapter, tab = r.tab, due = ch.unsorted ? 0 : chapterDue(ch.id);
+  const ch = r.chapter, tab = ch.unsorted && r.tab === 'learn' ? 'materials' : r.tab, due = ch.unsorted ? 0 : chapterDue(ch.id);
   const head = `<div class="chhead"><h1 class="ptitle">${esc(ch.title)}</h1>${ch.unsorted
     ? '<small>Materials and guides that aren’t in a chapter yet. File each one with its chapter picker.</small>'
     : `<span class="chacts"><button class="link" data-act="ch-rename">Rename</button><button class="link" data-act="ch-del">${CH.delArmed ? 'Really delete? Its materials become Unsorted. Click again' : 'Delete chapter'}</button></span>`}</div>`;
   const tabs = `<div class="tabs" role="tablist">${TABS.map(([k, l]) => `<a class="tab ${k === tab ? 'on' : ''}" role="tab" aria-selected="${k === tab}" href="${chHash(ch.id, k)}">${l}${k === 'practice' ? countPill(due, 'due') : ''}</a>`).join('')}</div>`;
-  const body = { materials: materialsTab, guide: guideTab, practice: practiceTab, tutor: tutorTab }[tab](ch, r);
+  const body = { learn: learnTab, materials: materialsTab, guide: guideTab, practice: practiceTab, tutor: tutorTab }[tab](ch, r);
   return `${head}${tabs}<div class="tabbody">${body}</div>`;
 }
 const docsIn = (ch) => DOCS.filter((d) => (ch.unsorted ? !d.chapterId : d.chapterId === ch.id));

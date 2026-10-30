@@ -4,7 +4,7 @@ A self-hosted study app. Each class is its own space with chapters, practice bui
 
 ## What it does
 
-- **Classes.** Create a space per course and describe it; the tutor reads that description. Each class has chapters, a Practice exams page, homework and documents.
+- **Classes.** Create a space per course and describe it; the tutor reads that description. Each class opens on a Continue button that walks you through the chapters section by section (a short read, then a few questions), and also has an Exams page for building practice exams, homework and documents.
 - **Practice.** Nothing is built in. Upload practice exams, notes and readings; the AI reads the problems out (or writes new ones from the material), files each under its chapter, and you practise them chapter by chapter or as a timed mixed exam.
 - **Homework.** Add a problem (typed or photographed). The AI finds the first step that went wrong and names the rule to use, without giving the answer unless you ask.
 - **Documents.** Upload photos, PDFs, Word files and text per class. "Find problems" pulls the problems out of them into your homework list, and the tutor searches your own notes when you ask a question.

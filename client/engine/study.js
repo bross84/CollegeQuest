@@ -2,11 +2,11 @@
 // plus recall questions. The questions are practised by typing first, with choices after a miss, and come back on a
 // spaced schedule (S.cards) so they stick.
 let GUIDES = [];
-let GB = { docs: new Set(), title: '', busy: false, note: '', err: '', ctl: null, chapterId: null, all: false };   // builder
+let GB = { docs: new Set(), title: '', busy: false, note: '', err: '', ctl: null, chapterId: null, all: false, auto: false };   // builder
 let GV = { id: null, delArmed: false, askSec: null };                                                              // viewer
 let Q = null;                                                                           // quiz round
 const GCHUNK = 8000, GMAX_PARTS = 40, GROUND = 10, GINTERVALS = [0, 1, 3, 7, 14, 30];
-const resetGB = () => { GB = { docs: new Set(), title: '', busy: false, note: '', err: '', ctl: null, chapterId: null, all: false }; };
+const resetGB = () => { GB = { docs: new Set(), title: '', busy: false, note: '', err: '', ctl: null, chapterId: null, all: false, auto: false }; };
 
 async function loadGuides() {
   try { GUIDES = await api('GET', `/api/classes/${CLASS.id}/guides`); } catch (e) { if (e.code === 'auth_required') throw e; GUIDES = []; }
@@ -123,7 +123,8 @@ async function gBuild() {
   const note = [stopped ? `Stopped after ${done} of ${total} parts.` : '', failed ? `${plural(failed, 'part')} couldn’t be read (${why}).` : '', cut ? `Only the first ${GMAX_PARTS} parts were read; build another guide from the rest.` : ''].filter(Boolean).join(' ');
   try {
     const g = await api('POST', `/api/classes/${CLASS.id}/guides`, { chapterId: GB.chapterId, title: GB.title.trim() || (picked.length === 1 ? picked[0].name.replace(/\.[^.]+$/, '') : `${picked[0].name.replace(/\.[^.]+$/, '')} and ${picked.length - 1} more`), docs: picked.map((d) => d.id), sections, cards, note });
-    GUIDES.unshift(g); resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); goGuide(g);
+    const auto = GB.auto;
+    GUIDES.unshift(g); resetGB(); GV = { id: g.id, delArmed: false, askSec: null }; loadChapters().then(() => {}); if (auto) go(chHash(g.chapterId || 'unsorted', 'learn')); else goGuide(g);
   } catch (e) { GB.err = 'Built it, but saving failed: ' + e.message; renderBuilder(); }
 }
 
@@ -265,10 +266,13 @@ function gNext() {
 function renderQuizSummary() {
   const firsts = Q.results.filter((r) => r === 'first').length, n = Q.items.length;
   const missed = Q.items.filter((x, i) => Q.results[i] === 'miss');
-  app.innerHTML = `<div class="sum"><h1>Session complete</h1><div class="big">${firsts} of ${n}</div><small>typed correctly on the first try</small>
+  const path = Q.path, here = path && pathAt(path.gid, path.i), nxt = here ? nextAfter(here) : null;
+  app.innerHTML = `<div class="sum"><h1>${path ? 'Section complete' : 'Session complete'}</h1><div class="big">${firsts} of ${n}</div><small>typed correctly on the first try</small>
     ${missed.length ? `<p class="lines">To review: ${missed.map((x) => esc(x.c.a)).join('; ')}. These come back sooner.</p>` : ''}
     <small>${plural(cardsMastered(), 'question')} of ${allCards().length} well learned so far.</small>
-    <div class="acts"><button class="btn" id="nextbtn" data-act="g-quiz" data-id="${Q.guideId || ''}" data-ch="${Q.chapterId || ''}">Another round</button><button class="link" data-act="g-home">Back to the course</button></div></div>`;
+    <div class="acts">${path
+      ? `${nxt ? `<button class="btn" id="nextbtn" data-act="g-sec" data-id="${nxt.g.id}" data-i="${nxt.i}">Next: ${esc(nxt.sec.heading)}</button>` : ''}<button class="${nxt ? 'link' : 'btn'}" ${nxt ? '' : 'id="nextbtn" '}data-act="g-secgo" data-id="${path.gid}" data-i="${path.i}">Try this section again</button>`
+      : `<button class="btn" id="nextbtn" data-act="g-quiz" data-id="${Q.guideId || ''}" data-ch="${Q.chapterId || ''}">Another round</button>`}<button class="link" data-act="g-home">Back to the course</button></div></div>`;
   document.getElementById('nextbtn').focus();
   Q = null;
 }
@@ -302,6 +306,10 @@ async function guideAct(act, t) {
   else if (act === 'g-build') gBuild();
   else if (act === 'g-stop') { if (GB.ctl) GB.ctl.abort(); }
   else if (act === 'g-quiz') startQuiz(id || null, t.dataset.ch || null);
+  else if (act === 'g-sec') showSection(id, +t.dataset.i);
+  else if (act === 'g-secgo') startSectionQuiz(id, +t.dataset.i);
+  else if (act === 'g-prep') prepareChapter(t.dataset.ch);
+  else if (act === 'g-learn') go(chHash(t.dataset.ch, 'learn'));
   else if (act === 'g-show') gShow();
   else if (act === 'g-pick') gPick(+t.dataset.c);
   else if (act === 'g-mine') gFinishCard('first');

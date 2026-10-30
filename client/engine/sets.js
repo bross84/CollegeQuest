@@ -12,7 +12,7 @@ const SMIX = {
   book: { label: 'More from the text', exam: 20, book: 60, ai: 20 },
   fresh: { label: 'Mostly new problems', exam: 20, book: 30, ai: 50 },
 };
-const SS = { csize: 15, xsize: 20, mix: 'like', tpl: null, focus: '', from: '', delId: null }; // tpl: the exam to model on; null until chosen, then defaults to the first exam
+const SS = { xsize: 20, mix: 'like', tpl: null, focus: '', from: '', delId: null }; // tpl: the exam to model on; null until chosen, then defaults to the first exam
 const READ_TRIED = new Set(); // documents already read for problems this session, so a build doesn't read them again
 
 async function loadSets() {
@@ -250,28 +250,13 @@ function setRowHTML(s) {
     <div class="dact"><button class="btn alt sm" data-act="b-settake" data-id="${s.id}">Take it</button><button class="btn alt sm" data-act="b-setprint" data-id="${s.id}">Print</button>
       <button class="link" data-act="b-setdel" data-id="${s.id}">${SS.delId === s.id ? 'Really delete? Click again' : 'Delete'}</button></div></div>`;
 }
-// The chapter's main action on its Practice tab.
-function studyZoneHTML(ch) {
-  const mine = SETS.filter((s) => s.kind === 'chapter' && s.chapterIds.includes(ch.id));
-  const hasExam = (PROBS[ch.id] || []).some((p) => srcOf(p) === 'exam');
-  const blurb = hasExam ? 'your instructor’s exam questions first, then problems from the text, then new ones written to match.'
-    : sourceDocs().some((d) => d.tag === 'exam') ? 'none of your instructor’s exam questions are filed under this chapter, so it uses problems from the text, then new ones written to match.'
-      : 'you haven’t uploaded an instructor exam yet, so it uses problems from the text, then new ones written to match. Upload the exam on the <a href="' + routeHash('exams') + '">Practice exams</a> page to include its questions.';
-  return `<section class="zone"><h3>Study set</h3>
-    <small>A short set that covers this chapter’s main ideas: ${blurb}</small>
-    <div class="answer"><select class="line sm" id="ssn" data-ss="csize" aria-label="Size">${sizeOptions(SS.csize)}</select>
-      <button class="btn" data-act="b-setbuild" data-ch="${ch.id}" ${BK.busy || !smp ? 'disabled' : ''}>Build study set</button></div>
-    ${smp ? '' : '<small class="warn">Needs the AI, which isn’t set up on this server.</small>'}${bkStatusHTML()}
-    ${mine.map(setRowHTML).join('')}</section>`;
-}
-// The exam builder on the Practice exams page: chapters, the instructor's exam to model it on, the mix, the size.
+// The exam builder on the Exams page: chapters, the instructor's exam to model it on, the mix, the size.
 function examBuilderHTML(list) {
   const tpls = sourceDocs().filter((d) => d.tag === 'exam'), loose = PROBS.none || [];
   if (SS.tpl !== '' && !tpls.some((d) => d.id === SS.tpl)) SS.tpl = tpls.length ? tpls[0].id : '';
   if (SS.from && !tpls.some((d) => d.id === SS.from)) SS.from = '';
   const count = (id) => (PROBS[id] || []).length, topics = topicList();
   const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
-  const sizes = [...new Set([...[5, 10, 15, 20, 30].filter((n) => n < list.length), list.length])], pre = sizes.filter((n) => n <= 10).pop();
   return `<section class="zone"><h3>Build my exam</h3>
     <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one below to include its questions)'}, and is saved so you can retake or print it.</small>
     ${CHAPTERS.length ? `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>` : '<small>Add chapters first (use “+ Add chapter” in the sidebar) so the exam can cover them.</small>'}
@@ -284,8 +269,6 @@ function examBuilderHTML(list) {
       ${smp && CHAPTERS.length ? `<button class="link" data-act="b-topics" ${BK.busy ? 'disabled' : ''}>${CLASS.topics && CLASS.topics.length ? 'Find topics again' : 'Find topics in my chapters'}</button>` : ''}</small>
     <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button></div>
     ${bkStatusHTML()}
-    ${list.length >= 3 ? `<div class="quick"><small>Or a quick random exam from everything in the bank:</small>
-      <div class="answer"><select class="line" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select><button class="btn alt" data-act="b-exmix">Start random exam</button></div></div>` : ''}
     ${smp ? '' : '<small class="warn">Building needs the AI, which isn’t set up on this server.</small>'}</section>`;
 }
 function savedExamsHTML() {
@@ -303,10 +286,6 @@ async function setAct(act, t) {
     if (SS.delId !== id) { SS.delId = id; return renderRoute(true); }
     try { await api('DELETE', `/api/sets/${id}`); SETS = SETS.filter((s) => s.id !== id); } catch (e) { BK.err = e.message; }
     SS.delId = null; return renderRoute(true);
-  }
-  if (act === 'b-setbuild') {
-    const ch = chapterById(t.dataset.ch);
-    return ch && buildSet({ kind: 'chapter', chapterIds: [ch.id], title: `${ch.title} study set`, size: SS.csize, mix: 'like', where: ch.id });
   }
   if (act === 'b-xbuild') {
     const ids = CHAPTERS.map((c) => c.id).filter((c) => XS.ch.has(c));

@@ -70,7 +70,7 @@ function practiceTab(ch) {
       <div class="answer"><select class="line sm" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n === list.length && n < 5 ? 'All ' : ''}${n} questions</option>`).join('')}</select>
         <select class="line sm" id="ext" aria-label="Time">${[15, 30, 45, 60].map((m) => `<option value="${m}" ${m === 30 ? 'selected' : ''}>${m} minutes</option>`).join('')}</select>
         <button class="btn alt" data-act="b-exam" data-ch="${ch.id}">Start practice exam</button></div></div>` : '';
-  return `${studyZoneHTML(ch)}${recall}
+  return `${recall}
   <details class="bankbox" ${BK.open ? 'open' : ''}><summary>Problem bank <small>${plural(list.length, 'problem')}</small></summary><section class="zone"><h3>Problems${list.length ? ` &middot; ${originals.length} from your materials${made ? `, ${made} AI-made` : ''}` : ''}</h3>
     <div class="row2">
       ${bankable.length ? `<button class="btn ${list.length ? 'alt' : ''}" data-act="b-build" ${off}>Build problem bank</button>` : ''}
@@ -256,7 +256,6 @@ async function bankAct(act, t) {
   }
   if (act === 'b-exam') return exStart(t.dataset.ch);
   if (act === 'b-exdoc') return exStart(null, id);
-  if (act === 'b-exmix') return exStart();
   if (act === 'b-xch') { if (XS.ch.has(id)) XS.ch.delete(id); else XS.ch.add(id); return renderRoute(true); }
   if (act === 'b-xorig') { XS.orig = !XS.orig; return renderRoute(true); }
   if (act === 'b-exsubmit') return exSubmit();
@@ -335,7 +334,7 @@ function renderExam() {
 }
 // ---- the class-level Practice exams page: instructor materials, and exams drawn from any chapters ----
 function examsHTML() {
-  const head = '<h1 class="ptitle">Practice exams</h1>';
+  const head = '<h1 class="ptitle">Exams</h1>';
   ensureProblems();
   if (!PLOADED) return `${head}<small>Loading…</small>`;
   if (!XS.init) { tickChapters(SS.tpl == null ? (sourceDocs().find((d) => d.tag === 'exam') || {}).id : SS.tpl); XS.init = true; }
