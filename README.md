@@ -5,10 +5,11 @@ A self-hosted study app. Each class is its own space with chapters, practice bui
 ## What it does
 
 - **Classes.** Create a space per course and describe it; the tutor reads that description. Each class opens on a Continue button that walks you through the chapters section by section (a short read, then a few questions), and also has an Exams page for building practice exams, homework and documents.
-- **Practice.** Nothing is built in. Upload practice exams, notes and readings; the AI reads the problems out (or writes new ones from the material), files each under its chapter, and you practise them chapter by chapter or as a timed mixed exam. Each question keeps its format: multiple choice stays multiple choice (with clickable options and instant grading), and a generated exam copies the mix and order of the exam it is modelled on. The section practice sets lean on multiple choice, since seeing the options helps recall.
+- **Practice.** Nothing is built in. Upload practice exams, notes and readings; the AI reads the problems out (or writes new ones from the material), files each under its chapter, and you practise them chapter by chapter or as a timed mixed exam. Each question keeps its format: multiple choice stays multiple choice (with clickable options and instant grading), a question with labelled parts (a, b, c) gets one answer box per part, and a generated exam copies the mix and order of the exam it is modelled on. Options and parts are read out of the exam text by a parser first (the AI only fills in what the parser can't tell), an answer key printed at the end of an exam ("Answers: 1) b 2) c") is used, and subscripts or exponents that a PDF split off ("K 2 SO 4", "10 23") are joined back. "Prepare this chapter" also reads the chapter's textbook problems, so its sections practise real ones; once you get them all right, the AI writes new ones like them (labelled AI-written). The section practice sets lean on multiple choice, since seeing the options helps recall.
 - **Homework.** Add a problem (typed or photographed). The AI finds the first step that went wrong and names the rule to use, without giving the answer unless you ask.
 - **Documents.** Upload photos, PDFs, Word files and text per class. "Find problems" pulls the problems out of them into your homework list, and the tutor searches your own notes when you ask a question.
 - **Study guides.** Pick a chapter or notes and the AI reads it in parts (about 8,000 characters at a time) and writes a guide: sections with a summary, key terms and the points to know, plus recall questions. Questions are practised by typing first, with choices after a miss, and come back on a spaced schedule. Guides are kept per class and can be printed. Every class type has this, including "Other". A long chapter takes a few minutes and several AI calls, so on free-tier keys it may pause briefly for the rate limit.
+- **Reference tables.** Chemistry classes get a periodic table (open under every practice question), plus a polyatomic ion list, a molecular geometry table and a mole map one button away. Choose them under Class settings.
 - **AI tutor.** Ask questions about the problem you are on or the course in general. Uses Groq and/or OpenRouter.
 
 ## Run it
@@ -69,6 +70,13 @@ npm run dev      # builds the client, then runs the server with auto-restart on 
 npm test
 ```
 
+To click through the app without real AI keys, run the stand-in AI (it answers the app's prompts with canned JSON) and point the server at it:
+
+```bash
+node test/mock-ai.js
+DATA_DIR=./scratch PORT=3999 GROQ_API_KEY=x GROQ_BASE_URL=http://localhost:3998 YOUTUBE_API_KEY=x YOUTUBE_BASE_URL=http://localhost:3998 node server/index.js
+```
+
 Layout:
 
 ```
@@ -76,7 +84,8 @@ server/          Express API: auth, classes, per-class state, documents, AI prox
 client/engine/   The app shell and shared game logic (plain scripts, concatenated by the build)
 client/packs/    One folder per subject: skills, reference screens, wording, meta.json
 client/build.js  Bundles everything into public/ (generated, git-ignored)
-test/            API tests (node --test)
+server/qtext.js  Reading exam text without the AI (options vs parts, answer keys, PDF repair); also built into the client
+test/            API and parser tests (node --test), and mock-ai.js
 ```
 
 ### Adding a subject
