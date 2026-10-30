@@ -1,3 +1,14 @@
+// PDF and Word text often carries Symbol-font characters (arrows, Greek letters, ±) as private-use code points that nothing can draw.
+// Turn the known ones back into real characters; on a reaction line any other stray character is an arrow, elsewhere it is dropped.
+const SYMBOL_FONT = { 0xAB: '↔', 0xAC: '←', 0xAD: '↑', 0xAE: '→', 0xAF: '↓', 0xDB: '⇔', 0xDC: '⇐', 0xDE: '⇒', 0xDD: '⇑', 0xDF: '⇓', 0xB0: '°', 0xB1: '±', 0xB4: '×', 0xB8: '÷', 0xA3: '≤', 0xB3: '≥', 0xB9: '≠', 0xBB: '≈', 0xBA: '≡', 0xA5: '∞', 0xD6: '√', 0xB7: '•', 0xB6: '∂', 0xB5: '∝', 0xD7: '⋅', 0xE5: '∑', 0xD5: '∏', 0xF2: '∫', 0xD1: '∇', 0xC6: '∅', 0xCE: '∈', 0xD0: '∠', 0xA2: '′', 0xB2: '″',
+  0x61: 'α', 0x62: 'β', 0x63: 'χ', 0x64: 'δ', 0x65: 'ε', 0x66: 'φ', 0x67: 'γ', 0x68: 'η', 0x69: 'ι', 0x6B: 'κ', 0x6C: 'λ', 0x6D: 'μ', 0x6E: 'ν', 0x6F: 'ο', 0x70: 'π', 0x71: 'θ', 0x72: 'ρ', 0x73: 'σ', 0x74: 'τ', 0x75: 'υ', 0x77: 'ω', 0x78: 'ξ', 0x79: 'ψ', 0x7A: 'ζ',
+  0x44: 'Δ', 0x46: 'Φ', 0x47: 'Γ', 0x4C: 'Λ', 0x50: 'Π', 0x51: 'Θ', 0x53: 'Σ', 0x57: 'Ω', 0x58: 'Ξ', 0x59: 'Ψ' };
+function cleanGlyphs(t) {
+  return String(t)
+    .replace(/[-]/g, (c) => SYMBOL_FONT[c.charCodeAt(0) - 0xF000] || c)
+    .replace(/[^\n]*[-�][^\n]*/g, (line) => (/\((?:s|l|g|aq)\)/.test(line) ? line.replace(/\s*[-�]\s*/g, ' → ') : line.replace(/[-�]/g, '')));
+}
+
 // Shared helpers for problem generators. Everything a generator returns is HTML.
 const R = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 const pick = (a) => a[R(0, a.length - 1)];

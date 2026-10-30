@@ -83,6 +83,13 @@ async function linkExam(redo) {
   return done;
 }
 
+// The chapters an exam covers start as the ones its model exam's questions are filed under, or every chapter when there is none.
+function tickChapters(tplId) {
+  const ids = new Set(allProblems().filter((p) => tplId && p.sourceDoc === tplId && p.chapterId && PROBS[p.chapterId]).map((p) => p.chapterId));
+  XS.ch.clear();
+  if (ids.size) ids.forEach((id) => XS.ch.add(id)); else { CHAPTERS.forEach((c) => XS.ch.add(c.id)); XS.ch.add('none'); }
+}
+
 // ---- chapter topics ----
 // The topics an exam can be aimed at: what the AI found in each chapter's text, plus the section headings of its study guides.
 function topicList() {
@@ -134,6 +141,7 @@ async function buildSet(o) {
     await linkExam(!!unread.length);
     const inScope = (p) => (p.chapterId && o.chapterIds.includes(p.chapterId)) || (o.tplId && p.sourceDoc === o.tplId);
     let pool = allProblems().filter(inScope);
+    if (o.focus && o.tplId) pool = pool.filter((p) => srcOf(p) !== 'exam' || p.sourceDoc === o.tplId); // other exams only lend the focus topic's questions
     if (pool.length < 3 && o.kind === 'chapter' && o.chapterIds.length === 1) { // nothing to copy: write problems from the notes
       await genCore(o.chapterIds[0], tally); await loadProblems(); pool = allProblems().filter(inScope);
     }
@@ -311,5 +319,8 @@ async function setAct(act, t) {
 }
 app.addEventListener('change', (e) => {
   const t = e.target;
-  if (t.dataset && t.dataset.ss && t.matches('select, input[type=text]')) { SS[t.dataset.ss] = /size$/.test(t.dataset.ss) ? +t.value : t.value; }
+  if (t.dataset && t.dataset.ss && t.matches('select, input[type=text]')) {
+    SS[t.dataset.ss] = /size$/.test(t.dataset.ss) ? +t.value : t.value;
+    if (t.dataset.ss === 'tpl') { tickChapters(t.value); renderRoute(true); }
+  }
 });

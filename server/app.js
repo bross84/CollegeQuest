@@ -6,7 +6,7 @@ const path = require('path');
 const { openDb } = require('./db');
 const { createAuth } = require('./auth');
 const { createAi, AiError } = require('./ai');
-const { typeOf, extractText, search } = require('./docs');
+const { typeOf, extractText, search, cleanGlyphs } = require('./docs');
 
 const newId = () => crypto.randomBytes(6).toString('hex');
 const clip = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
@@ -262,7 +262,7 @@ function createApp(cfg) {
   });
   api.get('/docs/:id/text', (req, res) => {
     const d = getDoc(req, res); if (!d) return;
-    res.json({ id: d.id, name: d.name, kind: d.kind, text: d.text, note: d.note });
+    res.json({ id: d.id, name: d.name, kind: d.kind, text: cleanGlyphs(d.text), note: d.note });
   });
   api.patch('/docs/:id', json, (req, res) => {
     const d = getDoc(req, res); if (!d) return;

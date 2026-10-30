@@ -338,7 +338,7 @@ function examsHTML() {
   const head = '<h1 class="ptitle">Practice exams</h1>';
   ensureProblems();
   if (!PLOADED) return `${head}<small>Loading…</small>`;
-  if (!XS.init) { CHAPTERS.forEach((c) => XS.ch.add(c.id)); XS.ch.add('none'); XS.init = true; }
+  if (!XS.init) { tickChapters(SS.tpl == null ? (sourceDocs().find((d) => d.tag === 'exam') || {}).id : SS.tpl); XS.init = true; }
   const off = BK.busy ? 'disabled' : '', { list } = examPool(), total = allProblems().length;
   const sizes = [...new Set([...[5, 10, 15, 20, 30].filter((n) => n < list.length), list.length])], pre = sizes.filter((n) => n <= 10).pop();
   const count = (id) => (PROBS[id] || []).length;

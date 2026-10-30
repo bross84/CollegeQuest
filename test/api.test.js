@@ -7,7 +7,7 @@ const path = require('path');
 const { loadConfig } = require('../server/config');
 const { createApp } = require('../server/app');
 const { createThinkFilter } = require('../server/ai');
-const { search } = require('../server/docs');
+const { search, cleanGlyphs } = require('../server/docs');
 
 let tmp, server, db, base, mock, mockHits;
 
@@ -417,4 +417,11 @@ test('topics: saved per class, deduped, tied to a chapter of the same class', as
   assert.deepStrictEqual(put.data.topics, [{ chapterId: ch.id, title: 'Naming polyatomic ions' }, { chapterId: null, title: 'Moles' }]);
   assert.deepStrictEqual((await call('GET', '/api/classes')).data.find((x) => x.id === c.id).topics, put.data.topics);
   assert.strictEqual((await call('PUT', '/api/classes/nope/topics', { topics: [] })).res.status, 404);
+});
+
+test('cleanGlyphs turns Symbol-font characters into real ones and arrows on reaction lines', () => {
+  assert.strictEqual(cleanGlyphs('Li (s) + Br2 (l)  LiBr'), 'Li (s) + Br2 (l) → LiBr');
+  assert.strictEqual(cleanGlyphs('Li (s) + Br (l) � LiBr'), 'Li (s) + Br (l) → LiBr');
+  assert.strictEqual(cleanGlyphs('x  3, '), 'x ± 3, α');
+  assert.strictEqual(cleanGlyphs('plain text'), 'plain text');
 });
