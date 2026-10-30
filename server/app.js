@@ -146,7 +146,7 @@ function createApp(cfg) {
         .map((d) => ({ label: clip(d && d.label, 60), date: /^\d{4}-\d{2}-\d{2}$/.test((d && d.date) || '') ? d.date : '' }))
         .filter((d) => d.date).sort((a, b2) => (a.date < b2.date ? -1 : a.date > b2.date ? 1 : 0)));
     }
-    if (b.refs !== undefined) out.refs = Array.isArray(b.refs) ? JSON.stringify(['pt', 'ions', 'geo'].filter((k) => b.refs.includes(k))) : '';
+    if (b.refs !== undefined) out.refs = Array.isArray(b.refs) ? JSON.stringify(['pt', 'ions', 'geo', 'mole'].filter((k) => b.refs.includes(k))) : '';
     return out;
   }
   const getClass = (id) => db.prepare('SELECT * FROM classes WHERE id = ?').get(id);

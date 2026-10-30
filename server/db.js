@@ -156,7 +156,7 @@ function openDb(dataDir) {
     `);
   }
   if (v < 13) {
-    // refs: the reference tables a class shows ('pt' periodic table, 'ions' polyatomic ions) as a JSON list; '' = not chosen, so
+    // refs: the reference tables a class shows ('pt' periodic table, 'ions' polyatomic ions, 'geo' geometry, 'mole' mole map) as a JSON list; '' = not chosen, so
     // the app decides (on for chemistry).
     db.exec(`
       ALTER TABLE classes ADD COLUMN refs TEXT NOT NULL DEFAULT '';

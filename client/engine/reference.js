@@ -66,12 +66,27 @@ function geoHTML() {
     <div class="gtwrap"><table class="gt"><thead><tr><th>Clouds</th><th>Bonds</th><th>Lone pairs</th><th>Shape</th><th>Bond angle</th><th>Examples</th></tr></thead><tbody>${rows}</tbody></table></div>
     <small>Lone pairs push the bonded atoms closer together, so the angle shrinks: methane 109.5°, ammonia 107°, water 104.5°.</small>`;
 }
+// Mole map (from ChemQuest): every conversion goes through moles.
+function moleMapHTML() {
+  const row = (a, via, b, mid) => `<div class="row3"><div class="box ${/a/.test(mid) ? 'mol' : ''}">${a}</div><div class="via">${via}</div><div class="box ${/b/.test(mid) ? 'mol' : ''}">${b}</div></div>`;
+  return `<p class="lead">Every conversion goes through <b>moles</b>. You can only change substance (A to B) while you are in moles, using the coefficients.</p>
+    <div class="mm">
+      ${row('Mass of A (g)', '÷ molar mass of A<br>× molar mass of A', 'Moles of A', 'b')}
+      ${row('Particles of A', '÷ 6.022 × 10<sup>23</sup><br>× 6.022 × 10<sup>23</sup>', 'Moles of A', 'b')}
+      ${row('Moles of A', '× coefficient of B<br>÷ coefficient of A', 'Moles of B', 'ab')}
+      ${row('Moles of B', '× molar mass of B<br>÷ molar mass of B', 'Mass of B (g)', 'a')}
+    </div>
+    <p class="lead"><b>Mass to mass:</b> grams A → moles A → moles B → grams B.</p>
+    <p class="lead"><b>Limiting reagent:</b> moles of each reactant ÷ its coefficient. The smaller number runs out first.</p>
+    <p class="lead"><b>Percent yield</b> = actual ÷ theoretical × 100. Theoretical comes from the limiting reagent only.</p>
+    <small>Unit prefixes: 1 mg = 0.001 g, 1 μg = 0.000001 g, 1 kg = 1000 g. Mole ratios are exact numbers, so they never limit significant figures.</small>`;
+}
 // inline: kept open under practice questions. Only the periodic table; the others are one button away.
-const REF_DEFS = [{ k: 'pt', label: 'Periodic table', html: ptHTML, inline: true }, { k: 'ions', label: 'Polyatomic ions', html: ionsHTML }, { k: 'geo', label: 'Molecular geometry', html: geoHTML }];
+const REF_DEFS = [{ k: 'pt', label: 'Periodic table', html: ptHTML, inline: true }, { k: 'ions', label: 'Polyatomic ions', html: ionsHTML }, { k: 'geo', label: 'Molecular geometry', html: geoHTML }, { k: 'mole', label: 'Mole map', html: moleMapHTML }];
 // The tables a class has switched on. A class that never chose gets them when it looks like chemistry.
 const classRefs = (c = CLASS) => {
   if (!c) return [];
-  const on = Array.isArray(c.refs) ? c.refs : /\bchem/i.test(`${c.name} ${c.description}`) ? ['pt', 'ions', 'geo'] : [];
+  const on = Array.isArray(c.refs) ? c.refs : /\bchem/i.test(`${c.name} ${c.description}`) ? ['pt', 'ions', 'geo', 'mole'] : [];
   return REF_DEFS.filter((r) => on.includes(r.k));
 };
 

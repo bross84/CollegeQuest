@@ -446,6 +446,7 @@ test('classes: reference tables are chosen per class, and unknown ones are dropp
   assert.strictEqual(c.refs, null, 'not chosen yet');
   const up = (await call('PATCH', `/api/classes/${c.id}`, { refs: ['geo', 'pt', 'bogus'] })).data;
   assert.deepStrictEqual(up.refs, ['pt', 'geo']);
+  assert.deepStrictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: ['mole', 'pt'] })).data.refs, ['pt', 'mole'], 'the mole map is a table too');
   assert.deepStrictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: [] })).data.refs, [], 'none chosen is kept');
   assert.strictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: null })).data.refs, null, 'back to automatic');
 });
