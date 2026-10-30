@@ -4,10 +4,10 @@ const ov = document.getElementById('ov'), ovBody = document.getElementById('ovbo
 
 function openRef(kind) {
   if (!ov || !PACK) return;
-  const tabs = [...PACK.refs.map((r) => ({ k: r.k, label: r.label })), { k: 'ask', label: 'Ask the tutor' }];
+  const refs = classRefs(), tabs = [...refs.map((r) => ({ k: r.k, label: r.label })), { k: 'ask', label: 'Ask the tutor' }];
   const k = tabs.some((t) => t.k === kind) ? kind : tabs[0].k;
   ovTabs.innerHTML = tabs.map((t) => `<button class="link" data-ov="${t.k}">${t.label}</button>`).join('');
-  const ref = PACK.refs.find((r) => r.k === k);
+  const ref = refs.find((r) => r.k === k);
   ovBody.innerHTML = k === 'ask' || !ref ? askHTML() : ref.html();
   ov.querySelectorAll('[data-ov]').forEach((b) => b.classList.toggle('on', b.dataset.ov === k));
   ov.dataset.k = k;
@@ -18,13 +18,13 @@ function openRef(kind) {
 function closeRef() { if (ov) { ov.hidden = true; if (ov.dataset.k === 'video') ovBody.innerHTML = ''; } } // clearing a video stops it
 
 if (ov) {
-  ov.addEventListener('mouseover', (e) => { if (PACK && PACK.refHover) PACK.refHover(e); });
+  ov.addEventListener('mouseover', (e) => refHover(e));
   ov.addEventListener('click', (e) => {
     const a = e.target.closest && e.target.closest('[data-ask]');
     if (a && a.dataset.ask) { askAct(a.dataset.ask, a); return; }
-    if (PACK && PACK.refHover && PACK.refHover(e)) return;
+    if (refHover(e)) return;
     const t = e.target.closest('[data-ov]');
-    if (t) { if (t.dataset.ov === 'close') closeRef(); else openRef(t.dataset.ov); } else if (e.target === ov) closeRef();
+    if (t) { if (t.dataset.ov === 'close') closeRef(); else openRef(t.dataset.ov); } else if (e.target === ov && ov.dataset.k !== 'video') closeRef(); // a video keeps playing until Close
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !ov.hidden) closeRef();

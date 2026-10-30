@@ -10,7 +10,6 @@ function rules() {
     + (CLASS.description ? `Notes about the course: ${CLASS.description} ` : '')
     + `${PACK.tutor.style} Be brief, calm and encouraging; never shame.`;
 }
-const fmtMath = (s) => PACK.fmt(cleanGlyphs(s));
 const curProblem = () => (W.src === 'bank' ? bankProblem(W.id) : S.mine.find((m) => m.id === W.id));
 const photoAccept = () => (smpLimits && smpLimits.images ? smpLimits.images.mediaTypes.join(',') : '');
 function mineRefresh() { if (W.id) renderWork(); else renderAdd(); }

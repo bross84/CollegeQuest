@@ -128,6 +128,7 @@ function overviewHTML() {
   return `<h1 class="ptitle">${esc(CLASS.name)}</h1>
   ${examHTML()}
   ${continueHTML()}
+  ${classRefs().length ? `<div class="acts reflinks"><small>Reference</small>${refChipsHTML()}</div>` : ''}
   ${SKILLS.length ? `<div class="ovcols"><div class="ovcol">${todayHTML()}${coachHTML()}</div></div>` : ''}
   ${startAnywhereHTML()}
   <div class="foot"><span><small id="syncnote">${syncNote()}</small></span>

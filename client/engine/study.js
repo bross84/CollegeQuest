@@ -214,19 +214,19 @@ function renderQuiz() {
   const x = Q.items[Q.i], st = Q.state, locked = st === 'right' || st === 'shown', last = Q.i === Q.items.length - 1;
   let input;
   if (st === 'choices' || (locked && Q.choices)) {
-    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${x.c.rich ? fmtMath(c) : esc(c)}</button>`).join('')}</div>`;
+    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${fmtMath(c)}</button>`).join('')}</div>`;
   } else {
     input = `<form class="answer" data-form="gq" autocomplete="off"><input id="gans" type="text" enterkeyhint="done" autocapitalize="off" spellcheck="false" aria-label="Your answer" value="${esc(Q.typed)}" ${locked ? 'disabled' : ''} placeholder="your answer">
       ${locked ? '' : '<button class="btn" type="submit">Check</button>'}</form>`;
   }
   let fb = '';
   if (st === 'choices' && Q.typed) fb = `<div class="fb no" role="status"><p>You typed <b>${esc(Q.typed)}</b>. Pick the right one from these choices.</p><div class="acts"><button class="link" data-act="g-mine">My answer was right</button></div></div>`;
-  if (st === 'right') fb = `<div class="fb good" role="status"><h3>${Q.fb === 'first' ? 'Correct.' : 'Correct on the retry.'}</h3><p>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</p>${stepsHTML(x)}<div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, true)}</div></div>`;
-  if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</b></p>${stepsHTML(x)}<p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
+  if (st === 'right') fb = `<div class="fb good" role="status"><h3>${Q.fb === 'first' ? 'Correct.' : 'Correct on the retry.'}</h3><p>${fmtMath(x.c.a)}</p>${stepsHTML(x)}<div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, true)}</div></div>`;
+  if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${fmtMath(x.c.a)}</b></p>${stepsHTML(x)}<p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
   const tutorBtn = smp ? `<button class="btn alt sm" data-act="follow">${Q.askOpen ? 'Hide the tutor' : 'Ask the tutor'}</button>` : '';
   const help = st === 'ask' || (st === 'choices' && !Q.typed) ? `<div class="help acts"><button class="link" data-act="g-show">I don’t know this one</button>${tutorBtn}</div>` : '';
-  app.innerHTML = `<div class="rbar"><button class="link" data-act="${Q.path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
-  <div class="prob"><div class="eyebrow">${[Q.path ? '' : x.g.title, x.c.topic, x.c.src].filter(Boolean).map(esc).join(' &middot; ')}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen ? followHTML() : ''}</div>`;
+  app.innerHTML = `<div class="rbar"><button class="link" data-act="${Q.path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">‹ End session</button><span class="reflinks">${refChipsHTML()}</span><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
+  <div class="prob"><div class="eyebrow">${[Q.path ? '' : x.g.title, x.c.topic, x.c.src].filter(Boolean).map(esc).join(' &middot; ')}</div><div class="qtext">${fmtMath(x.c.q)}</div>${input}${help}${fb}${Q.askOpen ? followHTML() : ''}</div>${refPanelHTML()}`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('gans');
   if (nb) nb.focus(); else if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }

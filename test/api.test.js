@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 12);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 13);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -439,4 +439,13 @@ test('problems keep their answer format and options, and one document\'s questio
   const gone = (await call('DELETE', `/api/docs/${note.id}/problems`)).data;
   assert.strictEqual(gone.removed, 3, 'its originals go, the AI-written one stays');
   assert.strictEqual((await call('GET', `/api/classes/${c.id}/problems`)).data.length, 1);
+});
+
+test('classes: reference tables are chosen per class, and unknown ones are dropped', async () => {
+  const c = (await call('POST', '/api/classes', { name: 'REF 1', pack: 'general' })).data;
+  assert.strictEqual(c.refs, null, 'not chosen yet');
+  const up = (await call('PATCH', `/api/classes/${c.id}`, { refs: ['geo', 'pt', 'bogus'] })).data;
+  assert.deepStrictEqual(up.refs, ['pt', 'geo']);
+  assert.deepStrictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: [] })).data.refs, [], 'none chosen is kept');
+  assert.strictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: null })).data.refs, null, 'back to automatic');
 });

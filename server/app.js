@@ -123,7 +123,7 @@ function createApp(cfg) {
   });
 
   // ---- classes ----
-  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, dates: JSON.parse(r.dates || '[]'), topics: JSON.parse(r.topics || '[]'), createdAt: r.created_at });
+  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, dates: JSON.parse(r.dates || '[]'), topics: JSON.parse(r.topics || '[]'), refs: r.refs ? JSON.parse(r.refs) : null, createdAt: r.created_at });
   function stats(id) {
     const out = { docs: db.prepare('SELECT COUNT(*) n FROM documents WHERE class_id = ?').get(id).n, total: 0, lastDay: null, streak: 0, openHw: 0 };
     const st = db.prepare('SELECT json FROM class_state WHERE class_id = ?').get(id);
@@ -146,6 +146,7 @@ function createApp(cfg) {
         .map((d) => ({ label: clip(d && d.label, 60), date: /^\d{4}-\d{2}-\d{2}$/.test((d && d.date) || '') ? d.date : '' }))
         .filter((d) => d.date).sort((a, b2) => (a.date < b2.date ? -1 : a.date > b2.date ? 1 : 0)));
     }
+    if (b.refs !== undefined) out.refs = Array.isArray(b.refs) ? JSON.stringify(['pt', 'ions', 'geo'].filter((k) => b.refs.includes(k))) : '';
     return out;
   }
   const getClass = (id) => db.prepare('SELECT * FROM classes WHERE id = ?').get(id);
@@ -158,8 +159,8 @@ function createApp(cfg) {
     const c = classInput(req.body || {}, false);
     if (!c.name) return res.status(400).json({ error: 'Give the class a name.' });
     const id = newId();
-    db.prepare('INSERT INTO classes (id, name, pack, description, dates, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, c.name, c.pack, c.description, c.dates, Date.now());
+    db.prepare('INSERT INTO classes (id, name, pack, description, dates, refs, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, c.name, c.pack, c.description, c.dates, c.refs || '', Date.now());
     res.status(201).json({ ...classRow(getClass(id)), stats: stats(id) });
   });
   api.patch('/classes/:id', json, (req, res) => {
@@ -167,7 +168,7 @@ function createApp(cfg) {
     const c = classInput(req.body || {}, true);
     if (c.name === '') return res.status(400).json({ error: 'Give the class a name.' });
     delete c.pack; // the subject can't change once progress exists
-    const col = { name: 'name', description: 'description', dates: 'dates' };
+    const col = { name: 'name', description: 'description', dates: 'dates', refs: 'refs' };
     for (const [k, v] of Object.entries(c)) db.prepare(`UPDATE classes SET ${col[k]} = ? WHERE id = ?`).run(v, cur.id);
     res.json({ ...classRow(getClass(cur.id)), stats: stats(cur.id) });
   });

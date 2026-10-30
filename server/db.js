@@ -154,6 +154,14 @@ function openDb(dataDir) {
       PRAGMA user_version = 12;
     `);
   }
+  if (v < 13) {
+    // refs: the reference tables a class shows ('pt' periodic table, 'ions' polyatomic ions) as a JSON list; '' = not chosen, so
+    // the app decides (on for chemistry).
+    db.exec(`
+      ALTER TABLE classes ADD COLUMN refs TEXT NOT NULL DEFAULT '';
+      PRAGMA user_version = 13;
+    `);
+  }
   return db;
 }
 

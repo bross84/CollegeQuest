@@ -313,7 +313,7 @@ const relatedHTML = (p) => {
 };
 function renderExam() {
   if (!EX.done) {
-    app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
+    app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="reflinks">${refChipsHTML()}</span><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
     <div class="prob"><div class="eyebrow">Practice exam &middot; ${esc(EX.label)}</div>
       <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
       ${EX.items.map((p, i) => {

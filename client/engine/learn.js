@@ -123,9 +123,9 @@ function showSection(gid, i) {
   const s = p.sec, inCh = pathList().filter((x) => x.ch.id === p.ch.id), n = inCh.findIndex((x) => x.g.id === p.g.id && x.i === p.i) + 1;
   app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Overview</button><span class="progress">${esc(p.ch.title)} &middot; section ${n} of ${inCh.length}</span></div>
   <div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">${esc(s.heading)}</h2>
-    ${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
-    ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-    ${s.terms.length ? `<dl class="gterms">${s.terms.map((t) => `<dt>${esc(t.term)}</dt><dd>${esc(t.def)}</dd>`).join('')}</dl>` : ''}
+    ${s.summary ? `<p>${fmtMath(s.summary)}</p>` : ''}
+    ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${fmtMath(x)}</li>`).join('')}</ul>` : ''}
+    ${s.terms.length ? `<dl class="gterms">${s.terms.map((t) => `<dt>${fmtMath(t.term)}</dt><dd>${fmtMath(t.def)}</dd>`).join('')}</dl>` : ''}
     <div class="acts"><button class="btn" id="nextbtn" data-act="g-secgo" data-id="${p.g.id}" data-i="${p.i}">Start the problems</button>${videosHTML(s.video || `${s.heading} ${subjectWord()}`, true, `${s.heading}. ${s.summary}`)}</div></div>`;
   window.scrollTo(0, 0);
   const b = document.getElementById('nextbtn'); if (b) b.focus();
