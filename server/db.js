@@ -122,6 +122,13 @@ function openDb(dataDir) {
       PRAGMA user_version = 8;
     `);
   }
+  if (v < 9) {
+    // topics: the specific things each chapter teaches ({ chapterId, title }), found by the AI so an exam can be aimed at one.
+    db.exec(`
+      ALTER TABLE classes ADD COLUMN topics TEXT NOT NULL DEFAULT '[]';
+      PRAGMA user_version = 9;
+    `);
+  }
   return db;
 }
 

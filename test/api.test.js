@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 8);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 9);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -406,4 +406,15 @@ test('find: every word must appear, in documents (with snippets) and in problems
   assert.deepStrictEqual([none.docs.length, none.problems.length], [0, 0]);
   assert.deepStrictEqual((await call('GET', `/api/classes/${c.id}/find?q=`)).data, { docs: [], problems: [] });
   assert.strictEqual((await call('GET', '/api/classes/nope/find?q=x')).res.status, 404);
+});
+
+test('topics: saved per class, deduped, tied to a chapter of the same class', async () => {
+  const c = (await call('POST', '/api/classes', { name: 'TOP 1', pack: 'general' })).data;
+  const other = (await call('POST', '/api/classes', { name: 'TOP 2', pack: 'general' })).data;
+  const ch = (await call('POST', `/api/classes/${c.id}/chapters`, { title: 'Ch 1' })).data;
+  const foreign = (await call('POST', `/api/classes/${other.id}/chapters`, { title: 'Elsewhere' })).data;
+  const put = await call('PUT', `/api/classes/${c.id}/topics`, { topics: [{ chapterId: ch.id, title: 'Naming polyatomic ions' }, { chapterId: ch.id, title: 'naming POLYATOMIC ions' }, { chapterId: foreign.id, title: 'Moles' }, { title: '  ' }] });
+  assert.deepStrictEqual(put.data.topics, [{ chapterId: ch.id, title: 'Naming polyatomic ions' }, { chapterId: null, title: 'Moles' }]);
+  assert.deepStrictEqual((await call('GET', '/api/classes')).data.find((x) => x.id === c.id).topics, put.data.topics);
+  assert.strictEqual((await call('PUT', '/api/classes/nope/topics', { topics: [] })).res.status, 404);
 });

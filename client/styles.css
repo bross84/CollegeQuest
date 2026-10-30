@@ -504,3 +504,4 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .picker .sbox { padding: 0; }
 .snip { margin: 6px 0 0; font-size: .92rem; color: var(--muted); }
 .snip mark, .dn mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 2px; }
+.topichint { display: block; margin: -2px 0 12px; }

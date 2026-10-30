@@ -83,6 +83,40 @@ async function linkExam(redo) {
   return done;
 }
 
+// ---- chapter topics ----
+// The topics an exam can be aimed at: what the AI found in each chapter's text, plus the section headings of its study guides.
+function topicList() {
+  const seen = new Set(), out = [];
+  const add = (title, chapterId) => { const t = String(title || '').trim(), k = t.toLowerCase(); if (t && !seen.has(k)) { seen.add(k); out.push({ title: t, chapterId: chapterId || null }); } };
+  (CLASS.topics || []).forEach((t) => add(t.title, t.chapterId));
+  GUIDES.forEach((g) => g.sections.forEach((s) => add(s.heading, g.chapterId)));
+  const pos = (id) => { const i = CHAPTERS.findIndex((c) => c.id === id); return i < 0 ? 999 : i; };
+  return out.sort((a, b) => pos(a.chapterId) - pos(b.chapterId));
+}
+// Reads a few parts of each chapter's own text and asks the AI to list what it teaches. The list is saved with the class.
+async function scanTopics() {
+  if (BK.busy) return;
+  if (!smp) { BK.err = 'Finding topics needs the AI, which isn’t set up on this server.'; return renderRoute(true); }
+  bankBegin(null);
+  const found = [];
+  try {
+    for (const ch of CHAPTERS) {
+      const docs = DOCS.filter((d) => d.chapterId === ch.id && d.chars && d.kind !== 'image' && d.tag !== 'exam');
+      if (!docs.length) continue;
+      BK.note = `Listing the topics in ${ch.title}…`; paintBank();
+      let parts = (await docParts(docs)).filter((x) => x.text);
+      if (parts.length > 6) parts = Array.from({ length: 6 }, (_, i) => parts[Math.floor((i * parts.length) / 6)]); // spread across the chapter
+      for (const part of parts) {
+        const r = await aiJson(`${rules()}\n\nBelow is part of the textbook chapter "${ch.title}" for "${CLASS.name}". List the specific topics, rules and skills it teaches, as short names of 2 to 5 words that a student would recognise on an exam (for example "naming polyatomic ions"). At most 8. Skip worked examples, history and summaries.\n\nReply with only this JSON:\n{"topics":["topic name"]}\n\nText:\n${part.text.slice(0, 9000)}`, BK.ctl, bankWait(), 600);
+        (Array.isArray(r && r.topics) ? r.topics : []).forEach((t) => { if (typeof t === 'string' && t.trim()) found.push({ chapterId: ch.id, title: t.trim().slice(0, 80) }); });
+      }
+    }
+    if (!found.length) throw Object.assign(new Error('I couldn’t find topics in the chapters’ text. Upload the chapters’ text into their chapters first.'), { code: 'none' });
+    CLASS.topics = (await api('PUT', `/api/classes/${CLASS.id}/topics`, { topics: found })).topics;
+    bankEnd(`Found ${plural(CLASS.topics.length, 'topic')} across your chapters.`);
+  } catch (e) { bankEnd('', e); }
+}
+
 // ---- building ----
 // o: { kind: 'chapter'|'exam', chapterIds, title, size, mix, tplId, focus, from, where }
 // focus: a topic (e.g. "polyatomic ions") whose instructor questions are pulled in whole, from the exam document `from` or any exam; the rest follows the model exam and chapters.
@@ -106,10 +140,11 @@ async function buildSet(o) {
     const forced = []; // the instructor's questions about the focus topic, always included
     if (o.focus) {
       const src = allProblems().filter((p) => p.kind === 'original' && srcOf(p) === 'exam' && (!o.from || p.sourceDoc === o.from));
+      const entry = topicList().find((t) => t.title.toLowerCase() === o.focus.toLowerCase()), ctx = await classContext(o.focus, entry ? entry.chapterId : null); // what the student's own text says about it
       for (let i = 0; i < src.length; i += 60) {
         BK.note = `Finding the questions about ${o.focus}… (${Math.min(i + 60, src.length)} of ${src.length})`; paintBank();
         const part = src.slice(i, i + 60);
-        const r = await aiJson(`${rules()}\n\nBelow are numbered questions from the instructor’s practice exams for "${CLASS.name}". List the ones that test or use: ${o.focus}. Judge by what each one asks (it may not use those words), and leave out ones that don’t really involve it.\n\nReply with only this JSON:\n{"match":[3,7]}\n\nQuestions:\n`
+        const r = await aiJson(`${rules()}\n\nBelow are numbered questions from the instructor’s practice exams for "${CLASS.name}". List the ones that test or use: ${o.focus}. Judge by what each one asks (it may not use those words), and leave out ones that don’t really involve it.${ctx}\n\nReply with only this JSON:\n{"match":[3,7]}\n\nQuestions:\n`
           + part.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'), BK.ctl, bankWait(), 800);
         (Array.isArray(r && r.match) ? r.match : []).forEach((x) => { const p = part[(+x || 0) - 1]; if (p && !forced.includes(p)) forced.push(p); });
       }
@@ -226,18 +261,21 @@ function examBuilderHTML(list) {
   const tpls = sourceDocs().filter((d) => d.tag === 'exam'), loose = PROBS.none || [];
   if (SS.tpl !== '' && !tpls.some((d) => d.id === SS.tpl)) SS.tpl = tpls.length ? tpls[0].id : '';
   if (SS.from && !tpls.some((d) => d.id === SS.from)) SS.from = '';
-  const count = (id) => (PROBS[id] || []).length;
+  const count = (id) => (PROBS[id] || []).length, topics = topicList();
   const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
   const sizes = [...new Set([...[5, 10, 15, 20, 30].filter((n) => n < list.length), list.length])], pre = sizes.filter((n) => n <= 10).pop();
   return `<section class="zone"><h3>Build my exam</h3>
-    <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one above to include its questions)'}, and is saved so you can retake or print it.</small>
+    <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one below to include its questions)'}, and is saved so you can retake or print it.</small>
     ${CHAPTERS.length ? `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>` : '<small>Add chapters first (use “+ Add chapter” in the sidebar) so the exam can cover them.</small>'}
     <div class="xrow"><label class="fld"><small>Model it on</small><select class="line" data-ss="tpl">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="fld"><small>Mix</small><select class="line" data-ss="mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
       <label class="fld"><small>Size</small><select class="line" data-ss="xsize">${sizeOptions(SS.xsize)}</select></label></div>
-    <div class="xrow"><label class="fld"><small>Also include questions about (optional)</small><input class="line" type="text" id="xfocus" data-ss="focus" maxlength="100" placeholder="e.g. polyatomic ions" value="${esc(SS.focus)}"></label>
+    <div class="xrow"><label class="fld"><small>Also include questions about (optional)</small><input class="line" type="text" id="xfocus" data-ss="focus" list="xtopics" maxlength="100" placeholder="Search your chapters’ topics, or type one" autocomplete="off" value="${esc(SS.focus)}"><datalist id="xtopics">${topics.map((t) => `<option value="${esc(t.title)}" label="${chapterById(t.chapterId) ? esc(chapterById(t.chapterId).title) : ''}"></option>`).join('')}</datalist></label>
       <label class="fld"><small>…taken from</small><select class="line" data-ss="from">${[['', 'Any instructor exam']].concat(tpls.map((d) => [d.id, d.name])).map(([v, l]) => `<option value="${v}" ${SS.from === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
+    <small class="topichint">${topics.length ? `${plural(topics.length, 'topic')} from your chapters. Pick one to pull that topic’s questions into the exam, from the exam chosen above.` : 'No topic list yet. The AI can read your chapters and list what each one teaches, so you can pick from it.'}
+      ${smp && CHAPTERS.length ? `<button class="link" data-act="b-topics" ${BK.busy ? 'disabled' : ''}>${CLASS.topics && CLASS.topics.length ? 'Find topics again' : 'Find topics in my chapters'}</button>` : ''}</small>
     <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button></div>
+    ${bkStatusHTML()}
     ${list.length >= 3 ? `<div class="quick"><small>Or a quick random exam from everything in the bank:</small>
       <div class="answer"><select class="line" id="exn" aria-label="Questions">${sizes.map((n) => `<option value="${n}" ${n === pre ? 'selected' : ''}>${n} questions</option>`).join('')}</select><button class="btn alt" data-act="b-exmix">Start random exam</button></div></div>` : ''}
     ${smp ? '' : '<small class="warn">Building needs the AI, which isn’t set up on this server.</small>'}</section>`;
@@ -250,6 +288,7 @@ function savedExamsHTML() {
 async function setAct(act, t) {
   const id = t.dataset && t.dataset.id;
   if (act !== 'b-setdel') SS.delId = null;
+  if (act === 'b-topics') return scanTopics();
   if (act === 'b-settake') return takeSet(id);
   if (act === 'b-setprint') return printSet(id);
   if (act === 'b-setdel') {

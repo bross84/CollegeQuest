@@ -220,7 +220,7 @@ async function bankSimilar(origs, n, chId) {
 const clearBtn = (which, label) => `<button class="link" data-act="b-clear" data-which="${which}">${BK.clearArmed === which ? 'Really delete them? Click again' : label}</button>`;
 
 async function bankAct(act, t) {
-  if (/^b-(set|xbuild)/.test(act)) return setAct(act, t);
+  if (/^b-(set|xbuild|topics)/.test(act)) return setAct(act, t);
   const id = t.dataset && t.dataset.id, chId = (ROUTE && ROUTE.realId) || t.dataset.ch;
   if (act !== 'b-del') BK.delId = null;
   if (act !== 'b-clear') BK.clearArmed = null;
@@ -354,15 +354,15 @@ function examsHTML() {
   const hasBooks = allProblems().some((p) => p.kind === 'original' && srcOf(p) === 'book');
   const matchLine = exQs.length ? `<small>${matched} of ${plural(exQs.length, 'exam question')} matched to textbook problems${hasBooks ? '' : ' (read a textbook chapter first)'}.</small>
     ${hasBooks && smp && matched < exQs.length ? `<div class="answer"><button class="btn alt sm" data-act="b-link" ${off}>Match exam questions to the text</button></div>` : ''}` : '';
-  const srcs = sourceDocs().filter((d) => d.tag === 'exam' || d.tag === 'textbook' || allProblems().some((p) => p.sourceDoc === d.id));
+  const srcs = sourceDocs().filter((d) => d.tag === 'exam');
   return `${head}
-  <p class="lead">Practice exams cover more than one chapter. Upload your instructor’s exams and review materials, let the AI read the questions and file each under its chapter, then build a timed exam from any chapters.</p>
-  <div class="answer"><label class="btn ${DU.busy ? 'alt' : ''}" for="xfile">${DU.busy ? 'Uploading…' : 'Upload a practice exam'}</label><input type="file" id="xfile" multiple accept="${DOC_ACCEPT}" hidden ${DU.busy ? 'disabled' : ''}></div>
-  ${upMsgHTML()}
-  ${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p><div class="acts"><button class="link" data-act="b-stop">Stop</button></div></div>` : ''}${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}
-  <section class="zone"><h3>Exams and review materials</h3>${srcs.length ? srcs.map(srcRow).join('') : '<small>Nothing yet. Upload a past exam above, or tag a document as a Practice exam or Textbook under All documents.</small>'}${matchLine}</section>
+  <p class="lead">Build an exam that covers several chapters. It draws on your instructor’s exam questions, problems from the textbook and new ones written to match. Everything you upload stays under <a href="${routeHash('docs')}">All documents</a>; the textbook chapters are read for you when you build.</p>
   ${examBuilderHTML(list)}
   ${savedExamsHTML()}
+  <section class="zone"><h3>Your practice exams</h3>
+    <div class="answer"><label class="btn alt ${DU.busy ? 'alt' : ''}" for="xfile">${DU.busy ? 'Uploading…' : 'Upload a practice exam'}</label><input type="file" id="xfile" multiple accept="${DOC_ACCEPT}" hidden ${DU.busy ? 'disabled' : ''}></div>
+    ${upMsgHTML()}
+    ${srcs.length ? srcs.map(srcRow).join('') : '<small>None yet. Upload a past exam, or tag a document as a Practice exam under All documents.</small>'}${matchLine}</section>
   ${allProblems().length ? `<div class="skiprow">${clearBtn('all', `Clear all ${plural(allProblems().length, 'problem')} read from my materials`)}</div>` : ''}
   ${loose.length && CHAPTERS.length ? `<details class="bankbox"><summary>Not filed under a chapter <small>${plural(loose.length, 'problem')}</small></summary><section class="zone"><small>The AI couldn’t place these. Pick a chapter for each, or ${clearBtn('none', 'clear them')}.</small>
     <div class="mine plist">${loose.map((p) => `<div class="prow"><button class="mine-item" data-act="b-open" data-id="${p.id}"><span class="mtext">${fmtMath(p.text)}</span></button>

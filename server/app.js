@@ -123,7 +123,7 @@ function createApp(cfg) {
   });
 
   // ---- classes ----
-  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, dates: JSON.parse(r.dates || '[]'), createdAt: r.created_at });
+  const classRow = (r) => ({ id: r.id, name: r.name, pack: PACKS.includes(r.pack) ? r.pack : 'general', description: r.description, dates: JSON.parse(r.dates || '[]'), topics: JSON.parse(r.topics || '[]'), createdAt: r.created_at });
   function stats(id) {
     const out = { docs: db.prepare('SELECT COUNT(*) n FROM documents WHERE class_id = ?').get(id).n, total: 0, lastDay: null, streak: 0, openHw: 0 };
     const st = db.prepare('SELECT json FROM class_state WHERE class_id = ?').get(id);
@@ -170,6 +170,17 @@ function createApp(cfg) {
     const col = { name: 'name', description: 'description', dates: 'dates' };
     for (const [k, v] of Object.entries(c)) db.prepare(`UPDATE classes SET ${col[k]} = ? WHERE id = ?`).run(v, cur.id);
     res.json({ ...classRow(getClass(cur.id)), stats: stats(cur.id) });
+  });
+  api.put('/classes/:id/topics', json, (req, res) => {
+    const cur = needClass(req, res); if (!cur) return;
+    const seen = new Set(), topics = [];
+    for (const t of Array.isArray(req.body && req.body.topics) ? req.body.topics.slice(0, 600) : []) {
+      const title = clip(t && t.title, 80), key = title.toLowerCase();
+      if (!title || seen.has(key)) continue;
+      seen.add(key); topics.push({ chapterId: chapterOf(cur.id, t.chapterId), title });
+    }
+    db.prepare('UPDATE classes SET topics = ? WHERE id = ?').run(JSON.stringify(topics), cur.id);
+    res.json({ topics });
   });
   api.delete('/classes/:id', (req, res) => {
     const cur = needClass(req, res); if (!cur) return;
