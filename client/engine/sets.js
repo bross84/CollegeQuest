@@ -263,9 +263,11 @@ function printSet(id) {
 const bkStatusHTML = () => `${BK.busy ? `<div class="fb" role="status"><p>${esc(BK.note)}</p><div class="acts"><button class="link" data-act="b-stop">Stop</button></div></div>` : ''}`
   + `${BK.err ? `<div class="fb no" role="status"><p>${esc(BK.err)}</p></div>` : ''}${BK.msg ? `<div class="fb good" role="status"><p>${esc(BK.msg)}</p></div>` : ''}`;
 const sizeOptions = (cur) => SET_SIZES.map((n) => `<option value="${n}" ${n === cur ? 'selected' : ''}>${n} problems</option>`).join('');
+// How many of a saved set's questions are no longer in the bank (a document was read again and its question changed, or it was deleted).
+const setMissing = (s) => s.items.length - setProblems(s).length;
 function setRowHTML(s) {
-  const items = setProblems(s), when = new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `<div class="docrow"><div class="dtop"><b>${esc(s.title)}</b><small>${plural(items.length, 'problem')} &middot; ${breakdown(items) || 'empty'} &middot; ${when}</small></div>
+  const items = setProblems(s), gone = setMissing(s), when = new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<div class="docrow"><div class="dtop"><b>${esc(s.title)}</b><small>${plural(items.length, 'problem')} &middot; ${breakdown(items) || 'empty'} &middot; ${when}</small>${gone ? `<small class="warn">${plural(gone, 'question')} gone</small>` : ''}</div>
     <div class="dact"><button class="btn alt sm" data-act="b-settake" data-id="${s.id}">Take it</button><button class="btn alt sm" data-act="b-setprint" data-id="${s.id}">Print</button>
       <button class="link" data-act="b-setdel" data-id="${s.id}">${SS.delId === s.id ? 'Really delete? Click again' : 'Delete'}</button></div></div>`;
 }
@@ -292,7 +294,8 @@ function examBuilderHTML(list) {
 }
 function savedExamsHTML() {
   const mine = SETS.filter((s) => s.kind === 'exam');
-  return mine.length ? `<section class="zone"><h3>Saved exams</h3>${mine.map(setRowHTML).join('')}</section>` : '';
+  const stale = mine.filter((s) => setMissing(s) > 0).length;
+  return mine.length ? `<section class="zone"><h3>Saved exams</h3>${stale ? `<div class="fb no" role="status"><p>${stale === 1 ? '1 saved exam uses' : `${stale} saved exams use`} questions that were re-read. Rebuild ${stale === 1 ? 'it' : 'them'}.</p></div>` : ''}${mine.map(setRowHTML).join('')}</section>` : '';
 }
 
 async function setAct(act, t) {
