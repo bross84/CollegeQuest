@@ -27,8 +27,8 @@ function findPrompt(part, { skillHint, withAnswers, source, chapters }) {
     + 'Find every problem the student is expected to solve. Skip worked examples unless there are no other problems. '
     + `Transcribe each problem as plain text: ${PACK.finder}. Do NOT solve anything.${withAnswers ? ' If the material has an answer key or solutions, copy the final answer for each problem into "answer"; leave "answer" empty when there is none. Never work out an answer yourself.' : ''}\n\n`
     + 'Give each problem’s number as printed ("number": "21", "3.21" or "Question 9"; empty if it has none), and leave the number out of "text". '
-    + 'Keep each problem’s answer format: "format" is "mc" for multiple choice, "tf" for true/false, "fill" for fill in the blank, or "work" for anything solved by working it out. '
-    + 'For multiple choice put only the question in "text" and list every option, in order and without its a) b) c) letter, in "choices". Fix any options that the text extraction ran together. '
+    + 'Keep each problem’s answer format: "format" is "mc" for multiple choice, "tf" for true/false, "fill" for fill in the blank, "parts" for one question with several labelled parts that each need their own written answer, or "work" for anything else solved by working it out. '
+    + 'For multiple choice put only the question in "text" and list every option, in order and without its a) b) c) letter, in "choices". Fix any options that the text extraction ran together. For "parts", list each part (without its letter) in "choices" the same way. A question whose a) b) c) items are tasks or blanks to fill in is "parts", not multiple choice. '
     + `${withAnswers ? 'For multiple choice, "answer" is the text of the correct option (not its letter) when the material shows the key. ' : ''}\n\n`
     + `Reply with only this JSON (at most 30 problems):\n{"topic":"short name of the unit or section, e.g. Average rate of change","problems":[{${['"number":"21"', '"text":"the problem"', '"format":"mc"', '"choices":["option"]', withAnswers && '"answer":""', skillHint].filter(Boolean).join(',')}}]}\n\n`
     + (chapters && chapters.length ? `This material may cover several chapters, so give each problem its own "chapter": the number of the chapter it belongs to from the list below, or 0 if none fits.\n${chapters.map((c, i) => `${i + 1}. ${c.title}`).join('\n')}\n\n` : '')
@@ -37,13 +37,16 @@ function findPrompt(part, { skillHint, withAnswers, source, chapters }) {
 
 // A problem as the AI describes it, tidied: the question, its answer format, its options and its answer. A letter answer
 // ("b") becomes the text of that option. Anything that isn't a real multiple choice (under two options) has none.
-const FORMATS = ['mc', 'tf', 'fill', 'work'];
+// A multi-part question ('parts') keeps the prompt of each part in choices (an AI writing one may call them "parts").
+const FORMATS = ['mc', 'tf', 'fill', 'work', 'parts'];
 function shapeProblem(p) {
   const text = String((p && p.text) || '').trim();
-  let choices = (Array.isArray(p && p.choices) ? p.choices : []).map((c) => String(c).replace(/^\s*\(?[A-Ha-h][).:]\s+/, '').trim()).filter(Boolean).slice(0, 8);
+  const given = p && p.format === 'parts' && Array.isArray(p.parts) && p.parts.length ? p.parts : p && p.choices;
+  let choices = (Array.isArray(given) ? given : []).map((c) => String(c).replace(/^\s*\(?[A-Ha-h][).:]\s+/, '').trim()).filter(Boolean).slice(0, 8);
   let format = FORMATS.includes(p && p.format) ? p.format : choices.length >= 2 ? 'mc' : '';
   if (format === 'mc' && choices.length < 2) format = '';
-  if (format !== 'mc') choices = [];
+  if (format === 'parts' && !choices.length) format = 'work';
+  if (format !== 'mc' && format !== 'parts') choices = [];
   let answer = String((p && p.answer) || '').trim();
   const letter = answer.match(/^\(?([A-Ha-h])\)?[.)]?$/);
   if (format === 'mc' && letter && choices[letter[1].toLowerCase().charCodeAt(0) - 97]) answer = choices[letter[1].toLowerCase().charCodeAt(0) - 97];
@@ -63,3 +66,7 @@ function keyIndex(p, opts) {
 }
 // The options to show for a problem, or null when it is answered by writing.
 const optionsOf = (p) => (p.format === 'mc' && p.choices && p.choices.length >= 2 ? p.choices : p.format === 'tf' ? ['True', 'False'] : null);
+// The parts of a multi-part question, each answered in its own box, or null.
+const partsOf = (p) => (p.format === 'parts' && p.choices && p.choices.length ? p.choices : null);
+// A question with its parts written under it, for the tutor and anything else that reads it as one piece of text.
+const questionText = (p) => (partsOf(p) ? `${p.text}\n${p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join('\n')}` : p.text);

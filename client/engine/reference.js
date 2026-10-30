@@ -126,7 +126,7 @@ const unmark = (h) => h.replace(/\u0001/g, '<span class="poly">').replace(/\u000
 // A question's text as it is shown: cleaned, formatted for the subject, and for classes with reference tables the formulas are
 // laid out and the polyatomic ions coloured.
 const fmtMath = (s) => {
-  const t = cleanGlyphs(String(s));
+  const t = repairPdfText(cleanGlyphs(String(s))); // text stored before the repair at upload still shows "K2SO4", not "K 2 SO 4"
   return classRefs().length ? unmark(PACK.fmt(markChem(t))) : PACK.fmt(t);
 };
 

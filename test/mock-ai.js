@@ -15,7 +15,7 @@ function findProblems(p) {
   const qs = text.split(/(?=Question\s*\d+\s*[:.])/i).filter((x) => /^Question\s*\d+/i.test(x));
   qs.forEach((q) => {
     const m = q.match(/^Question\s*(\d+)\s*[:.]\s*([\s\S]*)$/i), body = m[2].replace(/Answers?\s*:[\s\S]*$/i, '').trim();
-    if (/_{3,}/.test(body)) out.push({ number: m[1], text: body.split(/[a-d]\)/)[0].trim(), format: 'mc', choices: ['9004', '0.00660', '22000'], answer: '' });
+    if (/\d_{3,}/.test(body)) out.push({ number: m[1], text: body.split(/ [a-d]\)/)[0].trim(), format: 'mc', choices: [...body.matchAll(/([\d.]+)_{3,}/g)].map((x) => x[1]), answer: '' });
     else out.push({ number: '', text: `Question ${m[1]}:${body}`, format: 'work', choices: [], answer: '' });
   });
   if (!out.length) lines(text, /^\s*(\d+)\.\s+(.{10,})$/gm).forEach((m) => out.push({ number: m[1], text: m[2].trim(), format: 'work', choices: [], answer: m[1] === '1' ? '3' : '' }));

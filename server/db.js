@@ -2,6 +2,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('fs');
 const path = require('path');
+const { readQuestion } = require('./qtext');
 
 function openDb(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -161,6 +162,20 @@ function openDb(dataDir) {
       ALTER TABLE classes ADD COLUMN refs TEXT NOT NULL DEFAULT '';
       PRAGMA user_version = 13;
     `);
+  }
+  if (v < 14) {
+    // raw: a question's text as it was first saved, kept when a later reading changes it.
+    // Questions already read out of documents are read again by the parser in qtext.js: options the PDF left in the question
+    // become multiple-choice options, labelled parts become a multi-part question, and split subscripts are joined.
+    db.exec('ALTER TABLE problems ADD COLUMN raw TEXT NOT NULL DEFAULT \'\'');
+    const upd = db.prepare('UPDATE problems SET text = ?, format = ?, choices = ?, ref = ?, raw = ? WHERE id = ?');
+    db.exec('BEGIN');
+    for (const r of db.prepare("SELECT id, text, format, choices, ref, answer FROM problems WHERE kind = 'original'").all()) {
+      const q = readQuestion({ text: r.text, number: r.ref, format: r.format, choices: JSON.parse(r.choices || '[]'), answer: r.answer });
+      const choices = JSON.stringify(q.choices), ref = r.ref || q.ref;
+      if (q.text && (q.text !== r.text || q.format !== r.format || choices !== r.choices || ref !== r.ref)) upd.run(q.text, q.format, choices, ref, q.text !== r.text ? r.text : '', r.id);
+    }
+    db.exec('PRAGMA user_version = 14; COMMIT');
   }
   return db;
 }

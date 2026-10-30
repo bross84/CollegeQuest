@@ -1,6 +1,7 @@
 // Document types we accept, text extraction, and a small keyword search over extracted text.
 const fs = require('fs');
 const path = require('path');
+const { repairPdfText } = require('./qtext');
 
 // extension -> { kind, mime }. The stored mime comes from here, never from the upload, so a file can't pose as HTML.
 const TYPES = {
@@ -34,7 +35,7 @@ async function extractText(kind, file) {
     if (kind === 'pdf') {
       const pdf = require('pdf-parse/lib/pdf-parse.js');
       const r = await pdf(fs.readFileSync(file));
-      const text = cleanGlyphs(String(r.text || '')).replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_TEXT);
+      const text = repairPdfText(cleanGlyphs(String(r.text || ''))).replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_TEXT);
       return { text, note: text.length < 40 ? 'No readable text in this PDF (it may be scanned). Upload the pages as photos instead.' : '' };
     }
     if (kind === 'docx') {

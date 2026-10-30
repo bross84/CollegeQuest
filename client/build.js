@@ -8,7 +8,7 @@ const root = __dirname;
 const out = path.join(root, '..', 'public');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8').replace(/\r\n/g, '\n');
 
-const ENGINE = ['util', 'game', 'ui', 'overlay', 'reference', 'mine', 'materials', 'ask', 'ai-client', 'store', 'classes', 'dashboard', 'docs', 'study', 'videos', 'chapters', 'find', 'bank', 'sets', 'learn', 'settings', 'boot'];
+const ENGINE = ['util', 'qtext', 'game', 'ui', 'overlay', 'reference', 'mine', 'materials', 'ask', 'ai-client', 'store', 'classes', 'dashboard', 'docs', 'study', 'videos', 'chapters', 'find', 'bank', 'sets', 'learn', 'settings', 'boot'];
 
 const metas = fs.readdirSync(path.join(root, 'packs'), { withFileTypes: true })
   .filter((d) => d.isDirectory())
@@ -31,7 +31,7 @@ metas.forEach((m) => {
 
 const publicMeta = metas.map(({ id, name, blurb, preset }) => ({ id, name, blurb, preset, url: packUrls[id] }));
 const app = `var CQ = { packs: {}, meta: ${JSON.stringify(publicMeta)}, registerPack: function (id, p) { CQ.packs[id] = p; } };\n`
-  + ENGINE.map((f) => read('engine', `${f}.js`)).join('\n');
+  + ENGINE.map((f) => (f === 'qtext' ? read('..', 'server', 'qtext.js') : read('engine', `${f}.js`))).join('\n'); // qtext is shared with the server
 const appUrl = write('app.js', app);
 const cssUrl = write('styles.css', read('styles.css'));
 

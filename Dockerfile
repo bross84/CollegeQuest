@@ -2,6 +2,7 @@
 FROM node:24-slim AS build
 WORKDIR /app
 COPY client ./client
+COPY server/qtext.js ./server/qtext.js
 RUN node client/build.js
 
 FROM node:24-slim

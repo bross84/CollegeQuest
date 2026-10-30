@@ -393,12 +393,14 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
 
   // ---- problems: a chapter's problem bank (originals pulled from uploads, plus AI-made similar ones) ----
   // A question's answer format and, for multiple choice, its options (at least two, or it is not multiple choice).
-  const FORMATS = ['mc', 'tf', 'fill', 'work'];
+  // A multi-part written question ('parts') keeps the prompt of each part in choices instead.
+  const FORMATS = ['mc', 'tf', 'fill', 'work', 'parts'];
   const shapeOf = (p) => {
     const choices = (Array.isArray(p && p.choices) ? p.choices : []).map((x) => clip(x, 300)).filter(Boolean).slice(0, 8);
     let format = FORMATS.includes(p && p.format) ? p.format : choices.length >= 2 ? 'mc' : '';
     if (format === 'mc' && choices.length < 2) format = '';
-    return { format, choices: format === 'mc' ? choices : [] };
+    if (format === 'parts' && !choices.length) format = 'work';
+    return { format, choices: format === 'mc' || format === 'parts' ? choices : [] };
   };
   const problemOut = (r) => ({ id: r.id, classId: r.class_id, chapterId: r.chapter_id, sourceDoc: r.source_doc, kind: r.kind, text: r.text, answer: r.answer, steps: JSON.parse(r.steps), topic: r.topic, links: r.links === null || r.links === undefined ? null : JSON.parse(r.links), format: r.format || '', choices: JSON.parse(r.choices || '[]'), wrong: JSON.parse(r.wrong || '[]'), aiKey: !!r.ai_key, ref: r.ref || '', createdAt: r.created_at });
   api.get('/chapters/:id/problems', (req, res) => {
@@ -453,6 +455,13 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
       db.prepare('UPDATE problems SET links = ? WHERE id = ?').run(JSON.stringify(req.body.links.filter((x) => mine.has(x) && x !== p.id).slice(0, 5)), p.id);
     }
     if (req.body && Array.isArray(req.body.wrong)) db.prepare('UPDATE problems SET wrong = ? WHERE id = ?').run(JSON.stringify(req.body.wrong.map((x) => clip(x, 300)).filter(Boolean).slice(0, 6)), p.id);
+    const rr = req.body && req.body.reread;
+    if (rr && typeof rr === 'object' && p.kind === 'original' && clip(rr.text, 4000)) { // the same question read again from its document
+      const shape = shapeOf(rr), text = clip(rr.text, 4000);
+      db.prepare('UPDATE problems SET text = ?, format = ?, choices = ?, ref = ?, raw = CASE WHEN raw = \'\' AND text <> ? THEN text ELSE raw END WHERE id = ?')
+        .run(text, shape.format, JSON.stringify(shape.choices), clip(rr.ref, 40) || p.ref, text, p.id);
+      if (clip(rr.answer, 500)) db.prepare('UPDATE problems SET answer = ?, ai_key = 0 WHERE id = ?').run(clip(rr.answer, 500), p.id);
+    }
     if (req.body && typeof req.body.answer === 'string' && !p.answer && clip(req.body.answer, 500)) db.prepare('UPDATE problems SET answer = ?, ai_key = 1 WHERE id = ?').run(clip(req.body.answer, 500), p.id); // only fills a missing key
     res.json(problemOut(db.prepare('SELECT * FROM problems WHERE id = ?').get(p.id)));
   });

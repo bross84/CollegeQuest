@@ -14,7 +14,7 @@ function bankProblem(id) {
   const p = allProblems().find((x) => x.id === id);
   if (!p) return null;
   return {
-    id: p.id, text: p.text, key: p.answer, topic: p.topic, skill: null, aiKey: p.kind === 'similar', steps: p.steps,
+    id: p.id, text: questionText(p), key: p.answer, topic: p.topic, skill: null, aiKey: p.kind === 'similar', steps: p.steps,
     get status() { return (bankGet(p.id) || {}).status || 'todo'; }, set status(v) { bankRec(p.id).status = v; },
     get tries() { return (bankGet(p.id) || {}).tries || 0; }, set tries(v) { bankRec(p.id).tries = v; },
     get chat() { return (bankGet(p.id) || {}).chat || []; }, set chat(v) { bankRec(p.id).chat = v; },
@@ -112,7 +112,8 @@ async function bankBuild(docs, where) {
     await loadProblems();
     await linkExam(tally.added > 0);
     if (where && !(PROBS[where] || []).length && !BK.ctl.signal.aborted) return bankGenerate(where, true);
-    bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} to the bank.${tally.cut ? ' That was a lot of material, so some of it was not read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
+    const upd = tally.updated ? `${tally.added ? ' ' : ''}Updated ${plural(tally.updated, 'question')} read before.` : '';
+    bankEnd(tally.added || upd ? `${tally.added ? `Added ${plural(tally.added, 'problem')} to the bank.` : ''}${upd}${tally.cut ? ' That was a lot of material, so some of it was not read. Run it again for the rest.' : ''}` : 'I couldn’t find any new problems in that.');
   } catch (e) { await loadProblems().catch(() => {}); bankEnd(tally.added ? `Added ${plural(tally.added, 'problem')} before it stopped.` : '', e); }
 }
 
@@ -123,12 +124,14 @@ async function readDocs(docs, tally) {
   if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
   const seen = new Set(allProblems().map((p) => normText(p.text)));
   for (const d of docs) {
-    // Questions read before the app kept each question's format are replaced, so a multiple-choice question gets its options back.
-    const old = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original');
-    if (old.length && old.every((p) => !p.format || !p.ref)) { await api('DELETE', `/api/docs/${d.id}/problems`); old.forEach((p) => seen.delete(normText(p.text))); }
+    // What an earlier read of this document saved: a question read again is updated in place (so saved exams and progress keep it),
+    // matched by its number or its question text.
+    const old = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original'), oldUsed = new Set();
+    const oldKey = old.map((p) => { const q = readQuestion({ text: p.text, number: p.ref }); return { p, ref: q.ref, k: normText(q.text) }; });
     const spread = d.tag === 'exam' || !d.chapterId, ask = spread && CHAPTERS.length ? CHAPTERS : null;
     const parts = await docParts([d]);
     if (parts.length > MAX_PARTS) tally.cut = true;
+    const answerKey = parseAnswerKey(parts.map((x) => x.text || '').join('\n'));
     const found = [];
     let topic = '';
     for (let i = 0; i < Math.min(parts.length, MAX_PARTS) && found.length < PER_DOC; i++) {
@@ -136,10 +139,20 @@ async function readDocs(docs, tally) {
       const source = d.tag === 'exam' ? 'a past practice exam' : d.tag === 'textbook' ? 'textbook pages' : 'class notes or handouts';
       const r = await aiJson(findPrompt(parts[i], { skillHint: '"skill":null' + (ask ? ',"chapter":0' : ''), withAnswers: true, source, chapters: ask }), BK.ctl, bankWait(), 3000);
       topic = topic || String((r && r.topic) || '').slice(0, 80);
-      (Array.isArray(r && r.problems) ? r.problems : []).forEach((p) => {
-        const sh = shapeProblem(p), text = sh.text, k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
-        if (text && !seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, ref: String((p && p.number) || '').replace(/^\s*(problem|question|q|exercise)\s*#?\s*/i, '').trim().slice(0, 40), topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
-      });
+      for (const p of Array.isArray(r && r.problems) ? r.problems : []) {
+        const q = readQuestion(p); // the question's own text decides multiple choice versus parts, not the AI
+        if (!q.answer && q.ref && answerKey[q.ref]) q.answer = answerKey[q.ref];
+        const sh = shapeProblem(q), text = sh.text, k = normText(text), pick = ask ? ask[(+(p && p.chapter) || 0) - 1] : null;
+        if (!text) continue;
+        const was = oldKey.find((o) => !oldUsed.has(o.p.id) && ((q.ref && o.ref === q.ref) || o.k === k));
+        if (was) { // the document's own key wins over an earlier reading's answer
+          oldUsed.add(was.p.id); seen.add(k);
+          const p0 = was.p, same = p0.text === text && p0.format === sh.format && JSON.stringify(p0.choices) === JSON.stringify(sh.choices) && p0.ref === q.ref;
+          if (!same || (sh.answer && sh.answer !== p0.answer)) { await api('PATCH', `/api/problems/${p0.id}`, { reread: { text, format: sh.format, choices: sh.choices, ref: q.ref, answer: sh.answer } }); tally.updated = (tally.updated || 0) + 1; }
+          continue;
+        }
+        if (!seen.has(k)) { seen.add(k); found.push({ kind: 'original', text, answer: sh.answer, format: sh.format, choices: sh.choices, ref: q.ref, topic, sourceDoc: d.id, chapterId: pick ? pick.id : d.chapterId || null }); }
+      }
     }
     for (let i = 0; i < Math.min(found.length, PER_DOC); i += 100) {
       const chunk = found.slice(i, Math.min(found.length, PER_DOC)).slice(0, 100);
@@ -285,7 +298,7 @@ function exStart(chId, docId) {
 }
 function exRun(label, items, min, chId) {
   round = null; Q = null; W.id = null; closeRef();
-  EX = { chId: chId || null, label, items, answers: items.map(() => ''), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
+  EX = { chId: chId || null, label, items, answers: items.map(() => ''), pa: items.map((p) => (partsOf(p) ? partsOf(p).map(() => '') : null)), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
   renderExam();
 }
 const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -299,7 +312,11 @@ function exSubmit() {
   clearInterval(EX.timer);
   EX.done = true;
   EX.results = EX.items.map((p, i) => {
-    const opts = optionsOf(p);
+    const opts = optionsOf(p), parts = partsOf(p);
+    if (parts) { // marked only when the key gives every part its own answer
+      const keys = partKeys(p.answer, parts.length), got = keys && parts.map((c, k) => localMatch(keys[k], EX.pa[i][k].trim()));
+      return !got || got.some((g) => g === null) ? null : got.every(Boolean);
+    }
     if (!opts) return localMatch(p.answer, EX.answers[i].trim());
     const key = keyIndex(p, opts);
     return key < 0 || EX.answers[i] === '' ? null : +EX.answers[i] === key;
@@ -317,9 +334,12 @@ function renderExam() {
     <div class="prob"><div class="eyebrow">Practice exam &middot; ${esc(EX.label)}</div>
       <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
       ${EX.items.map((p, i) => {
-        const opts = optionsOf(p);
+        const opts = optionsOf(p), parts = partsOf(p), longParts = parts && parts.some((c) => c.length > 40); // every box in a question is the same size
         return `<div class="exq"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div><div class="qtext">${fmtMath(p.text)}</div>
-        ${opts ? `<div class="opts" role="radiogroup" aria-label="Choices for question ${i + 1}">${opts.map((c, k) => `<label class="opt"><input type="radio" name="exq${i}" data-exc="${i}" value="${k}" ${EX.answers[i] === String(k) ? 'checked' : ''}><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></label>`).join('')}</div>`
+        ${parts ? `<div class="parts">${parts.map((c, k) => `<label class="part"><span class="ol">${'abcdefgh'[k]})</span><span class="ptext">${fmtMath(c)}</span>${longParts
+          ? `<textarea data-exp="${i}" data-k="${k}" rows="2" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}">${esc(EX.pa[i][k])}</textarea>`
+          : `<input class="line" type="text" data-exp="${i}" data-k="${k}" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}" value="${esc(EX.pa[i][k])}">`}</label>`).join('')}</div>`
+          : opts ? `<div class="opts" role="radiogroup" aria-label="Choices for question ${i + 1}">${opts.map((c, k) => `<label class="opt"><input type="radio" name="exq${i}" data-exc="${i}" value="${k}" ${EX.answers[i] === String(k) ? 'checked' : ''}><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></label>`).join('')}</div>`
           : `<textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea>`}</div>`;
       }).join('')}
       <div class="answer"><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>`;
@@ -332,13 +352,15 @@ function renderExam() {
     ${keyed.length ? `<div class="big">${right} of ${keyed.length}</div><small>matched the answer key (${plural(EX.items.length - keyed.length, 'question')} had no key to compare with)</small>` : '<small>None of these questions had an answer key to compare with. Open each one in the checker to find out where you stand.</small>'}
     ${blank ? `<p class="lines">${plural(blank, 'question')} left blank.</p>` : ''}</div>
   ${EX.items.map((p, i) => {
-    const r = EX.results[i], opts = optionsOf(p), mine = pickText(p, i), key = opts ? keyIndex(p, opts) : -1, keyText = key >= 0 ? `${'abcdefgh'[key]}) ${opts[key]}` : p.answer;
+    const r = EX.results[i], opts = optionsOf(p), parts = partsOf(p), mine = pickText(p, i), key = opts ? keyIndex(p, opts) : -1, keyText = key >= 0 ? `${'abcdefgh'[key]}) ${opts[key]}` : p.answer;
+    const pkeys = parts && partKeys(p.answer, parts.length);
     const verdict = r === true ? '<div class="fb good"><p><b>Matches the key.</b></p></div>'
       : r === false ? `<div class="fb no"><p><b>Doesn’t match the key.</b> The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</p></div>`
       : p.answer ? `<div class="fb"><p>${mine ? '' : 'Left blank. '}The key says: <b>${esc(keyText)}</b>${p.kind === 'similar' || p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}${mine ? '. Compare it with your work.' : '.'}</p></div>`
       : '<div class="fb"><p>No answer key for this one.</p></div>';
     return `<div class="prob exq"><div class="eyebrow">Question ${i + 1} &middot; ${esc(srcText(p, p.src))}</div><div class="qtext">${fmtMath(p.text)}</div>
-      ${opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''} ${String(k) === EX.answers[i] ? 'chosen' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : `<div class="where">${mine ? esc(mine) : '(left blank)'}</div>`}${verdict}
+      ${parts ? `<div class="parts">${parts.map((c, k) => `<div class="part"><span class="ol">${'abcdefgh'[k]})</span><span class="ptext">${fmtMath(c)}</span><span class="pans">${EX.pa[i][k].trim() ? esc(EX.pa[i][k].trim()) : '<i>blank</i>'}${pkeys ? `<small>Key: ${esc(pkeys[k])}</small>` : ''}</span></div>`).join('')}</div>`
+        : opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''} ${String(k) === EX.answers[i] ? 'chosen' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : `<div class="where">${mine ? esc(mine) : '(left blank)'}</div>`}${verdict}
       ${relatedHTML(p)}
       ${p.steps && p.steps.length ? `<details class="paste"><summary>Worked steps</summary><ol class="steps">${p.steps.map((s) => `<li>${fmtMath(s)}</li>`).join('')}</ol></details>` : ''}
       <div class="acts"><button class="btn alt sm" data-act="b-exopen" data-i="${i}">Check my work with the tutor</button>${videosHTML(`${p.topic || ''} ${subjectWord()}`.trim(), true, p.text)}</div></div>`;
@@ -387,5 +409,14 @@ app.addEventListener('change', async (e) => {
     renderRoute(true);
   }
 });
-app.addEventListener('input', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exa !== undefined) EX.answers[+t.dataset.exa] = t.value; });
+app.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!EX || EX.done || !t.dataset) return;
+  if (t.dataset.exa !== undefined) EX.answers[+t.dataset.exa] = t.value;
+  if (t.dataset.exp !== undefined) { // one part of a multi-part question; the whole answer reads "a) ... b) ..."
+    const i = +t.dataset.exp;
+    EX.pa[i][+t.dataset.k] = t.value;
+    EX.answers[i] = EX.pa[i].map((v, k) => (v.trim() ? `${'abcdefgh'[k]}) ${v.trim()}` : '')).filter(Boolean).join('\n');
+  }
+});
 app.addEventListener('change', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exc !== undefined && t.checked) EX.answers[+t.dataset.exc] = t.value; });

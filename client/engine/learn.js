@@ -27,6 +27,7 @@ const secPicks = (p) => (((S.secpick2 || {})[secKey(p)]) || []).map((id) => allP
 // A written problem can be asked as multiple choice only when it has one short answer: not several parts, and not an
 // explain, describe or draw question.
 const askable = (q) => {
+  if (q.format === 'parts') return false;
   const t = String(q.text || '');
   if (/\(\s*a\s*\)/i.test(t) && /\(\s*b\s*\)/i.test(t)) return false;
   if (/\b(explain|describe|discuss|draw|sketch|justify|prove|why)\b/i.test(t)) return false;

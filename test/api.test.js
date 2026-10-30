@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 13);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 14);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -448,4 +448,48 @@ test('classes: reference tables are chosen per class, and unknown ones are dropp
   assert.deepStrictEqual(up.refs, ['pt', 'geo']);
   assert.deepStrictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: [] })).data.refs, [], 'none chosen is kept');
   assert.strictEqual((await call('PATCH', `/api/classes/${c.id}`, { refs: null })).data.refs, null, 'back to automatic');
+});
+
+test('migration 14 reads stored questions again: jammed options become multiple choice, labelled parts become parts', () => {
+  const { openDb } = require('../server/db');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-mig14-'));
+  let d = openDb(dir);
+  d.exec("INSERT INTO classes (id, name, pack, created_at) VALUES ('c1', 'Chem', 'general', 1)");
+  const ins = d.prepare("INSERT INTO problems (id, class_id, kind, text, format, choices, ref, created_at) VALUES (?, 'c1', ?, ?, ?, '[]', '', 1)");
+  ins.run('p1', 'original', 'Question 11:42.0 g Cl 2 contains ________ molecules of Cl 2 . a)3.57 x 10 23 c) 1.78 x 10 23 b)0.592d) 9.22 x 10 24', 'work');
+  ins.run('p2', 'original', 'Question 3: For the following equation: Mg(OH)2 + 2 HCl  a) Write the full ionic equation  b) Write the net ionic equation', '');
+  ins.run('p3', 'original', 'Calculate the molar mass of water.', 'work');
+  ins.run('p4', 'similar', 'Question 1: a)x c) y b)z d) w', 'work');
+  d.exec('ALTER TABLE problems DROP COLUMN raw; PRAGMA user_version = 13;');
+  d.close();
+  d = openDb(dir);
+  const row = (id) => d.prepare('SELECT * FROM problems WHERE id = ?').get(id);
+  assert.strictEqual(d.prepare('PRAGMA user_version').get().user_version, 14);
+  assert.strictEqual(row('p1').format, 'mc');
+  assert.deepStrictEqual(JSON.parse(row('p1').choices), ['3.57 x 10^23', '0.592', '1.78 x 10^23', '9.22 x 10^24']);
+  assert.strictEqual(row('p1').text, '42.0 g Cl2 contains ________ molecules of Cl2 .');
+  assert.strictEqual(row('p1').ref, '11');
+  assert.match(row('p1').raw, /^Question 11:42.0 g Cl 2/, 'the text as first read is kept');
+  assert.strictEqual(row('p2').format, 'parts');
+  assert.deepStrictEqual(JSON.parse(row('p2').choices), ['Write the full ionic equation', 'Write the net ionic equation']);
+  assert.strictEqual(row('p3').text, 'Calculate the molar mass of water.');
+  assert.strictEqual(row('p3').raw, '');
+  assert.strictEqual(row('p4').format, 'work', 'AI-written problems are left alone');
+  d.close(); fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('problems: multi-part questions keep their parts, and a re-read updates a question in place', async () => {
+  const c = (await call('POST', '/api/classes', { name: 'PARTS 1', pack: 'general' })).data;
+  const [p] = (await call('POST', `/api/classes/${c.id}/problems`, { problems: [{ kind: 'original', text: 'Question 1:A bond a)x c) y b)z d) w', format: 'work' }] })).data;
+  const [q] = (await call('POST', `/api/classes/${c.id}/problems`, { problems: [{ kind: 'similar', text: 'Do both parts.', format: 'parts', choices: ['one', 'two'] }] })).data;
+  assert.strictEqual(q.format, 'parts');
+  assert.deepStrictEqual(q.choices, ['one', 'two']);
+  const r = (await call('PATCH', `/api/problems/${p.id}`, { reread: { text: 'A bond', format: 'mc', choices: ['x', 'z', 'y', 'w'], ref: '1', answer: 'z' } })).data;
+  assert.strictEqual(r.id, p.id);
+  assert.strictEqual(r.text, 'A bond');
+  assert.strictEqual(r.format, 'mc');
+  assert.deepStrictEqual(r.choices, ['x', 'z', 'y', 'w']);
+  assert.strictEqual(r.ref, '1');
+  assert.strictEqual(r.answer, 'z');
+  assert.strictEqual(db.prepare('SELECT raw FROM problems WHERE id = ?').get(p.id).raw, 'Question 1:A bond a)x c) y b)z d) w');
 });
