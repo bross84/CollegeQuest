@@ -111,24 +111,17 @@ async function writeSectionProblems(p, n, onNote) {
 }
 
 // ---- walking a section ----
-// A section is a page of its own (#/class/<id>/sec/<guide>/<n>), so the browser's Back button and the back links return to where
-// you came from: the course home, a chapter, or the previous section.
+// A section is a page of its own (#/class/<id>/sec/<guide>/<n>). Every way out of it (the Back and End session buttons, and the
+// browser's Back button, see the hashchange handler) returns to the course overview.
 const secHash = (gid, i) => `${baseHash()}/sec/${gid}/${i}`;
-let SECFROM = '';
-function openSection(gid, i) {
-  if (!/\/sec\//.test(location.hash)) SECFROM = location.hash;
-  go(secHash(gid, i));
-}
-function leaveSection(chId) {
-  const to = SECFROM && !/\/sec\//.test(SECFROM) ? SECFROM : chHash(chId || 'unsorted', 'learn');
-  SECFROM = ''; Q = null; go(to);
-}
+const openSection = (gid, i) => go(secHash(gid, i));
+function leaveSection() { Q = null; go(baseHash()); }
 function showSection(gid, i) {
   const p = pathAt(gid, i);
   if (!p) return renderHome();
   round = null; W.id = null; Q = null;
   const s = p.sec, inCh = pathList().filter((x) => x.ch.id === p.ch.id), n = inCh.findIndex((x) => x.g.id === p.g.id && x.i === p.i) + 1;
-  app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Back</button><span class="progress">${esc(p.ch.title)} &middot; section ${n} of ${inCh.length}</span></div>
+  app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Overview</button><span class="progress">${esc(p.ch.title)} &middot; section ${n} of ${inCh.length}</span></div>
   <div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">${esc(s.heading)}</h2>
     ${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
     ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}

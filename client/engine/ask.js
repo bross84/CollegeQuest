@@ -23,7 +23,7 @@ function askContext() {
     const x = Q.items[Q.i], sec = (x.g.sections || []).find((t) => t.heading === x.c.topic);
     return {
       kind: 'card', key: 'card|' + x.id, hw: false, revealed: Q.state === 'right' || Q.state === 'shown', skill: x.g.title,
-      q: x.c.q, choices: Q.choices || null, answer: x.c.a, section: sec ? `${sec.heading}. ${sec.summary}` : '',
+      q: x.c.q, choices: Q.choices || null, answer: x.c.a, steps: (x.c.steps || []).join(' '), section: sec ? `${sec.heading}. ${sec.summary}` : '',
     };
   }
   if (typeof GV !== 'undefined' && GV.askSec && typeof guideById === 'function' && guideById(GV.askSec.gid)) {

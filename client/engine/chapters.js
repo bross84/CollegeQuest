@@ -226,5 +226,6 @@ window.addEventListener('hashchange', () => {
   if (!CLASS) { const c = r && CLASSES.find((x) => x.id === r.cid); if (c && !CF) enterClass(c); return; }
   if (!r) return leaveClass(true);
   if (r.cid !== CLASS.id) { const c = CLASSES.find((x) => x.id === r.cid); return c ? enterClass(c) : leaveClass(true); }
+  if (ROUTE && ROUTE.view === 'section' && r.view !== 'section' && r.view !== 'overview') history.replaceState(null, '', baseHash()); // Back out of a section lands on the overview
   renderRoute();
 });
