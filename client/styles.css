@@ -121,8 +121,8 @@ h2.part { font-size: 1.35rem; margin-top: 40px; padding-bottom: 6px; border-bott
 
 /* summary */
 .sum { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-top: 8px; }
-.sum h1 { font-size: 1.35rem; }
-.sum .big { font-family: var(--display); font-size: 2rem; font-weight: 600; line-height: 1; }
+.sum h1 { font-size: 1.3rem; }
+.sum .big { font-family: var(--display); font-size: 1.3rem; font-weight: 600; line-height: 1; }
 .sum .lines { margin: 0; color: var(--muted); }
 .sum .acts { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 8px; }
 .sum-plan { width: 100%; max-width: 520px; }
@@ -309,6 +309,7 @@ form[data-form] .field { margin-bottom: -6px; }
 .tabs { display: flex; gap: 4px; margin: 12px 0 20px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .tab:hover { color: var(--ink); }
+@media (max-width: 480px) { .tab { padding: 8px 9px; } } /* all five chapter tabs fit on a phone */
 .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
 .tabbody { display: flex; flex-direction: column; gap: 14px; }
 .empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 22px; border: 1px dashed var(--line); border-radius: 8px; background: var(--card); }
@@ -447,17 +448,17 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .muted { color: var(--muted); }
 .dtotals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .dtotals > div { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
-.dtotals b { font-family: var(--display); font-size: 1.8rem; line-height: 1.1; }
+.dtotals b { font-family: var(--display); font-size: 1.15rem; line-height: 1.1; }
 .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start; }
 .dcard { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
 .dcard header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .dcard h2 { font-size: 1.25rem; overflow-wrap: anywhere; }
 .dcard header small { display: block; margin-top: 2px; }
-.dcard .pct { font-family: var(--display); font-size: 1.8rem; font-weight: 600; line-height: 1; }
+.dcard .pct { font-family: var(--display); font-size: 1.15rem; font-weight: 600; line-height: 1; }
 .dstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; }
 .dstats > div { display: flex; flex-direction: column-reverse; gap: 2px; }
 .dstats dt { font-size: .72rem; color: var(--muted); }
-.dstats dd { margin: 0; font-family: var(--display); font-size: 1.3rem; font-weight: 600; }
+.dstats dd { margin: 0; font-family: var(--display); font-size: 1.05rem; font-weight: 600; }
 .dstats dd.hot { color: var(--accent); }
 .chips2 { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip2 { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; font-size: .85rem; color: var(--ink); text-decoration: none; }
