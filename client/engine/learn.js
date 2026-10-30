@@ -18,51 +18,96 @@ function pathList() {
   return out;
 }
 const pathAt = (gid, i) => pathList().find((p) => p.g.id === gid && p.i === i);
-// 'read' = nothing to ask; 'new' = not started; 'working' = some missed or unseen; 'done' = every question answered right at least once
+// Problems written for a section are kept in the bank (AI-written, multiple choice, topic = the section's heading), so each is asked once.
+const secBank = (p) => { const chId = p.ch.unsorted ? null : p.ch.id; return allProblems().filter((q) => q.kind === 'similar' && q.format === 'mc' && q.topic === p.sec.heading && (chId ? q.chapterId === chId : !q.chapterId)); };
+const secItems = (p) => [...p.cards.map((x) => x.id), ...secBank(p).map((q) => 'p:' + q.id)];
+// 'new' = not started (or nothing written yet); 'working' = some missed or unseen; 'done' = everything asked so far answered right at least once;
+// 'read' = nothing to ask and no AI to write problems
 function secState(p) {
-  if (!p.cards.length) return 'read';
-  const recs = p.cards.map((x) => cardRec(x.id));
+  const ids = secItems(p);
+  if (!ids.length) return smp ? 'new' : 'read';
+  const recs = ids.map((id) => cardRec(id));
   if (recs.every((r) => r && r.box >= 1)) return 'done';
   return recs.some(Boolean) ? 'working' : 'new';
 }
 const todo = (p) => { const s = secState(p); return s === 'new' || s === 'working'; };
 const nextAfter = (p) => { const l = pathList(), k = l.findIndex((x) => x.g.id === p.g.id && x.i === p.i); return l.slice(k + 1).find(todo) || null; };
+const secNote = (p) => { const n = secItems(p).length; return n ? plural(n, 'question') : smp ? 'practice problems' : 'reading only'; };
 
-// Problems from the bank that match the section and have a short answer a typed reply can be checked against.
-function sectionProblems(p) {
-  const chId = p.ch.unsorted ? null : p.ch.id;
-  const mc = (q) => q.format === 'mc' && q.choices.length >= 2 && keyIndex(q, q.choices) >= 0;
-  const pool = allProblems().filter((q) => q.kind === 'original' && (mc(q) || (q.answer && q.answer.length <= 60 && !q.choices.length)) && q.text.length <= 240
-    && (chId ? q.chapterId === chId : !q.chapterId) && ((cardRec('p:' + q.id) || {}).box || 0) < 2);
-  if (!pool.length) return [];
-  const about = `${p.sec.heading} ${p.sec.summary} ${p.sec.terms.map((t) => t.term).join(' ')}`;
-  const pseudo = { id: p.g.id, title: p.g.title, sections: p.g.sections, cards: pool.map((q) => ({ a: cleanGlyphs(q.answer) })) }; // wrong choices come from other problems' answers
-  return shortlist([{ text: about }], pool, 2)[0].map((q) => { const right = mc(q) ? q.choices[keyIndex(q, q.choices)] : q.answer; return { g: pseudo, c: { q: cleanGlyphs(q.text.replace(/\s+/g, ' ')), a: cleanGlyphs(right), accept: [], wrong: mc(q) ? q.choices.filter((c) => c !== right).map(cleanGlyphs) : [], topic: p.sec.heading }, i: 0, id: 'p:' + q.id }; });
+// A bank problem as a quiz item: its options, the worked steps to show after it, and the formatting problems need.
+function problemItem(q, p, pseudo) {
+  const right = q.choices[keyIndex(q, q.choices)], tidy = (t) => cleanGlyphs(String(t).replace(/\s+/g, ' '));
+  return { g: pseudo, c: { q: tidy(q.text), a: tidy(right), accept: [], wrong: q.choices.filter((x) => x !== right).map(tidy), topic: p.sec.heading, steps: q.steps || [], rich: true, fixed: refersToOthers(q.choices) ? q.choices.map(tidy) : null }, i: 0, id: 'p:' + q.id };
+}
+// Writes n new multiple-choice problems for a section, modelled on the problems from your own exams and text that are closest to it,
+// and saves them in the bank. Returns the saved problems.
+async function writeSectionProblems(p, n, onNote) {
+  const chId = p.ch.unsorted ? null : p.ch.id, pool = allProblems().filter((q) => q.kind === 'original' && (chId ? q.chapterId === chId : !q.chapterId));
+  const terms = p.sec.terms.map((t) => t.term).join(', '), about = `${p.sec.heading} ${p.sec.summary} ${terms}`;
+  const models = pool.length ? shortlist([{ text: about }], pool, 5)[0] : [], ctx = await classContext(`${p.sec.heading} ${terms}`, chId);
+  const prompt = `${rules()}${ctx}\n\nWrite ${n} multiple-choice practice problems for the section "${p.sec.heading}" of "${CLASS.name}". ${p.sec.summary ? `The section says: ${p.sec.summary} ` : ''}${p.sec.points.length ? `Key points: ${p.sec.points.join(' ')} ` : ''}`
+    + (models.length ? `Model them on these problems from the course (same type and difficulty, different numbers, names or wording, and do not copy them):\n${models.map((q, i) => `${i + 1}. ${q.text.replace(/\s+/g, ' ').slice(0, 240)}${q.format === 'mc' ? ` (options: ${q.choices.join(' | ').slice(0, 200)})` : ''}${q.answer ? ` (answer: ${q.answer.slice(0, 60)})` : ''}`).join('\n')}\n\n` : 'Use only what the material says.\n\n')
+    + `Each problem has four options: one correct and three believable wrong ones (the mistakes students really make), listed in "choices", with the correct option's text in "answer" and one short step per line of working in "steps". Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\n`
+    + 'Reply with only this JSON:\n{"problems":[{"text":"the problem","choices":["option","option","option","option"],"answer":"text of the correct option","steps":["one short step"]}]}';
+  const r = await aiJson(prompt, new AbortController(), (s) => onNote(`Waiting for the AI quota (${s}s)…`), 3500);
+  const seen = new Set(allProblems().map((q) => normText(q.text)));
+  const fresh = (Array.isArray(r && r.problems) ? r.problems : []).slice(0, n).map((q) => {
+    const sh = mixChoices(shapeProblem(q));
+    return { kind: 'similar', text: sh.text, answer: sh.answer, format: 'mc', choices: sh.choices, steps: (Array.isArray(q && q.steps) ? q.steps : []).map((x) => String(x)), topic: p.sec.heading, sourceDoc: '', chapterId: chId };
+  }).filter((q) => q.text && q.choices.length >= 2 && keyIndex(q, q.choices) >= 0 && !seen.has(normText(q.text)) && seen.add(normText(q.text)));
+  if (!fresh.length) return [];
+  const made = await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: fresh });
+  await loadProblems();
+  return made;
 }
 
 // ---- walking a section ----
+// A section is a page of its own (#/class/<id>/sec/<guide>/<n>), so the browser's Back button and the back links return to where
+// you came from: the course home, a chapter, or the previous section.
+const secHash = (gid, i) => `${baseHash()}/sec/${gid}/${i}`;
+let SECFROM = '';
+function openSection(gid, i) {
+  if (!/\/sec\//.test(location.hash)) SECFROM = location.hash;
+  go(secHash(gid, i));
+}
+function leaveSection(chId) {
+  const to = SECFROM && !/\/sec\//.test(SECFROM) ? SECFROM : chHash(chId || 'unsorted', 'learn');
+  SECFROM = ''; Q = null; go(to);
+}
 function showSection(gid, i) {
   const p = pathAt(gid, i);
   if (!p) return renderHome();
   round = null; W.id = null; Q = null;
   const s = p.sec, inCh = pathList().filter((x) => x.ch.id === p.ch.id), n = inCh.findIndex((x) => x.g.id === p.g.id && x.i === p.i) + 1;
-  app.innerHTML = `<div class="rbar"><button class="link" data-act="g-learn" data-ch="${p.ch.id}">‹ ${esc(p.ch.title)}</button><span class="progress">Section ${n} of ${inCh.length}</span></div>
+  app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Back</button><span class="progress">${esc(p.ch.title)} &middot; section ${n} of ${inCh.length}</span></div>
   <div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">${esc(s.heading)}</h2>
     ${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
     ${s.points.length ? `<ul class="gpts">${s.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     ${s.terms.length ? `<dl class="gterms">${s.terms.map((t) => `<dt>${esc(t.term)}</dt><dd>${esc(t.def)}</dd>`).join('')}</dl>` : ''}
-    <div class="acts"><button class="btn" id="nextbtn" data-act="g-secgo" data-id="${p.g.id}" data-i="${p.i}">${p.cards.length ? 'Start the questions' : 'Next section'}</button>${videosHTML(s.video || `${s.heading} ${CLASS.name}`, true)}</div></div>`;
+    <div class="acts"><button class="btn" id="nextbtn" data-act="g-secgo" data-id="${p.g.id}" data-i="${p.i}">Start the problems</button>${videosHTML(s.video || `${s.heading} ${CLASS.name}`, true)}</div></div>`;
   window.scrollTo(0, 0);
   const b = document.getElementById('nextbtn'); if (b) b.focus();
 }
 async function startSectionQuiz(gid, i) {
   const p = pathAt(gid, i);
   if (!p) return renderHome();
-  if (!p.cards.length) { const nx = nextAfter(p); return nx ? showSection(nx.g.id, nx.i) : go(chHash(p.ch.id, 'learn')); }
+  round = null; W.id = null; Q = null;
   if (!PLOADED) await loadProblems().catch(() => {});
-  const items = shuffle([...shuffle(p.cards).slice(0, 6), ...sectionProblems(p)]);
-  round = null; W.id = null;
-  Q = { guideId: gid, chapterId: p.ch.unsorted ? null : p.ch.id, path: { gid, i }, askOpen: false, items, i: 0, results: [], extra: false };
+  const unseen = (q) => ((cardRec('p:' + q.id) || {}).box || 0) < 1; // never asked, or missed last time
+  let probs = shuffle(secBank(p).filter(unseen)).slice(0, 5), problem = '';
+  if (probs.length < 5 && smp) {
+    const show = (note) => { app.innerHTML = `<div class="rbar"><span class="progress">${esc(p.sec.heading)}</span></div><div class="prob"><div class="eyebrow">${esc(p.ch.title)}</div><h2 class="gtitle">Writing problems for this section…</h2><p class="lead">${esc(note)}</p></div>`; };
+    show('Looking at the problems from your exams and text that are closest to it. This takes a few seconds.');
+    try { probs = [...probs, ...await writeSectionProblems(p, 5 - probs.length, show)]; } catch (e) { problem = mineErr(e); }
+  }
+  const pseudo = { id: p.g.id, title: p.g.title, sections: p.g.sections, cards: [] };
+  const items = [...probs.map((q) => problemItem(q, p, pseudo)), ...shuffle(p.cards).slice(0, Math.max(0, 6 - probs.length))];
+  if (!items.length) {
+    app.innerHTML = `<div class="rbar"><button class="link" data-act="g-leave" data-ch="${p.ch.id}">‹ Back</button></div><div class="prob"><h2 class="gtitle">Nothing to practise yet</h2><p class="lead">${esc(problem || 'This section has no questions, and the AI isn’t set up to write any.')}</p></div>`;
+    return;
+  }
+  pseudo.cards = items.map((x) => x.c);
+  Q = { guideId: gid, chapterId: p.ch.unsorted ? null : p.ch.id, path: { gid, i }, askOpen: false, items: shuffle(items), i: 0, results: [], extra: false };
   qOpen(); renderQuiz();
 }
 // Reads the chapter's documents into a study guide in one go, then lands on the chapter's sections.
@@ -82,7 +127,7 @@ function continueHTML() {
   if (next) {
     const inCh = list.filter((x) => x.ch.id === next.ch.id), n = inCh.indexOf(next) + 1, st = secState(next);
     return `<section class="zone cont"><div class="eyebrow">${esc(next.ch.title)} &middot; section ${n} of ${inCh.length}</div><h2 class="gtitle">${esc(next.sec.heading)}</h2>
-      <small>${st === 'working' ? 'Pick up where you left off.' : 'A short read, then a few questions.'}</small>
+      <small>${st === 'working' ? 'Pick up where you left off.' : 'A short read, then a round of problems.'}</small>
       <div class="acts"><button class="btn big" data-act="g-sec" data-id="${next.g.id}" data-i="${next.i}">${st === 'working' ? 'Continue' : 'Start'}</button></div></section>`;
   }
   if (list.length) return '<section class="zone cont"><div class="eyebrow">Study path</div><h2 class="gtitle">You’ve been through every section.</h2><small>Review what’s due below, or build a practice exam from the Exams page.</small></section>';
@@ -97,16 +142,17 @@ const SEC_LABEL = { new: 'To do', working: 'In progress', done: 'Done', read: 'R
 function secRowHTML(p) {
   const st = secState(p);
   return `<div class="secrow"><span class="pill ${st === 'done' ? 'done' : st === 'read' ? '' : 'todo'}">${SEC_LABEL[st]}</span>
-    <span><b>${esc(p.sec.heading)}</b><small>${p.cards.length ? plural(p.cards.length, 'question') : 'reading only'}</small></span>
+    <span><b>${esc(p.sec.heading)}</b><small>${secNote(p)}</small></span>
     <button class="btn alt sm" data-act="g-sec" data-id="${p.g.id}" data-i="${p.i}">${st === 'done' ? 'Again' : st === 'working' ? 'Continue' : 'Start'}</button></div>`;
 }
 // The course home: every chapter's sections as tiles, so you can start wherever you like.
 function tileHTML(p) {
-  const st = secState(p), note = st === 'done' ? 'Done' : st === 'working' ? 'In progress' : st === 'read' ? 'Reading' : plural(p.cards.length, 'question');
+  const st = secState(p), note = st === 'done' ? 'Done' : st === 'working' ? 'In progress' : st === 'read' ? 'Reading' : secNote(p);
   return `<button class="tile ${st}" data-act="g-sec" data-id="${p.g.id}" data-i="${p.i}"><span class="tname">${esc(p.sec.heading)}</span><small>${note}</small></button>`;
 }
 function startAnywhereHTML() {
   if (!CHAPTERS.length) return '';
+  ensureProblems();
   const list = pathList();
   return CHAPTERS.map((ch) => {
     const mine = list.filter((p) => p.ch.id === ch.id), hasDocs = DOCS.some((d) => d.chapterId === ch.id && d.chars && d.tag !== 'exam');
@@ -118,6 +164,7 @@ function startAnywhereHTML() {
 }
 // A chapter's Learn tab: its sections with where you are in each.
 function learnTab(ch) {
+  ensureProblems();
   const list = pathList().filter((p) => p.ch.id === ch.id), docs = docsIn(ch).filter((d) => d.chars && d.tag !== 'exam');
   if (!list.length) {
     return docs.length

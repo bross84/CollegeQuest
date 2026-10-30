@@ -34,6 +34,7 @@ function parseRoute() {
   if (p[0] === 'ch' && p[1]) { r.view = 'chapter'; r.chId = p[1]; r.tab = TABS.some((t) => t[0] === p[2]) ? p[2] : 'learn'; r.gid = p[2] === 'guide' ? p[3] : undefined; }
   else if (p[0] === 'guide' && p[1]) { r.view = 'guide'; r.gid = p[1]; }
   else if (p[0] === 'search') { r.view = 'search'; try { r.q = decodeURIComponent(p.slice(1).join('/')); } catch (e) { r.q = ''; } }
+  else if (p[0] === 'sec' && p[1]) { r.view = 'section'; r.gid = p[1]; r.si = +p[2] || 0; }
   else if (['docs', 'hw', 'sets', 'exams'].includes(p[0])) r.view = p[0];
   return r;
 }
@@ -62,6 +63,7 @@ function renderRoute(keepScroll) {
     if (!ch) r = toOverview(); else { r.chapter = ch; r.realId = ch.unsorted ? null : ch.id; }
   }
   if (r.view === 'sets' && !SKILLS.length) r = toOverview();
+  if (r.view === 'section' && !pathAt(r.gid, r.si)) r = toOverview();
   ROUTE = r;
   if (r.gid) GV.id = r.gid;
   if (!(r.view === 'chapter' && r.tab === 'guide')) GV.askSec = null;
@@ -73,6 +75,7 @@ function renderRoute(keepScroll) {
     hw: () => shell('hw', `<h1 class="ptitle">Homework</h1>${mineSection()}`),
     sets: () => shell('sets', practiceSetsHTML()),
     exams: () => shell('exams', examsHTML()),
+    section: () => showSection(r.gid, r.si),
     search: () => { shell('search', searchPageHTML(r.q)); runFind(r.q); },
   }[r.view];
   pane();

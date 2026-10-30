@@ -35,7 +35,7 @@ async function loadProblems(chId) {
 function ensureProblems() {
   if (PLOADED || BK.loading) return;
   BK.loading = true;
-  loadProblems().catch(() => { PROBS = { none: [] }; PLOADED = true; }).then(() => { BK.loading = false; paintBank(); });
+  loadProblems().catch(() => { PROBS = { none: [] }; PLOADED = true; }).then(() => { BK.loading = false; paintBank(); if (ROUTE && (ROUTE.view === 'overview' || (ROUTE.view === 'chapter' && ROUTE.tab === 'learn'))) renderRoute(true); });
 }
 const onPractice = () => ROUTE && ((ROUTE.view === 'chapter' && ROUTE.tab === 'practice') || ROUTE.view === 'exams');
 const paintBank = () => { if (onPractice()) renderRoute(true); };

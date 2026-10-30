@@ -202,6 +202,7 @@ function startQuiz(guideId, chapterId) {
   qOpen(); renderQuiz();
 }
 function buildChoices(x) {
+  if (x.c.fixed) return { choices: x.c.fixed, ans: x.c.fixed.indexOf(x.c.a) }; // options that refer to each other ("all of the above") keep their order
   const a = x.c.a, seen = new Set([a.toLowerCase()]), w = [];
   [...x.c.wrong, ...shuffle(x.g.cards.filter((c) => c !== x.c).map((c) => c.a))].forEach((t) => { if (w.length < 3 && t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); w.push(t); } });
   const all = shuffle([a, ...w]);
@@ -213,21 +214,23 @@ function renderQuiz() {
   const x = Q.items[Q.i], st = Q.state, locked = st === 'right' || st === 'shown', last = Q.i === Q.items.length - 1;
   let input;
   if (st === 'choices' || (locked && Q.choices)) {
-    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${esc(c)}</button>`).join('')}</div>`;
+    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${x.c.rich ? fmtMath(c) : esc(c)}</button>`).join('')}</div>`;
   } else {
     input = `<form class="answer" data-form="gq" autocomplete="off"><input id="gans" type="text" enterkeyhint="done" autocapitalize="off" spellcheck="false" aria-label="Your answer" value="${esc(Q.typed)}" ${locked ? 'disabled' : ''} placeholder="your answer">
       ${locked ? '' : '<button class="btn" type="submit">Check</button>'}</form>`;
   }
   let fb = '';
   if (st === 'choices' && Q.typed) fb = `<div class="fb no" role="status"><p>You typed <b>${esc(Q.typed)}</b>. Pick the right one from these choices.</p><div class="acts"><button class="link" data-act="g-mine">My answer was right</button></div></div>`;
-  if (st === 'right') fb = `<div class="fb good" role="status"><h3>${Q.fb === 'first' ? 'Correct.' : 'Correct on the retry.'}</h3><p>${esc(x.c.a)}</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, true)}</div></div>`;
-  if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${esc(x.c.a)}</b></p><p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
+  if (st === 'right') fb = `<div class="fb good" role="status"><h3>${Q.fb === 'first' ? 'Correct.' : 'Correct on the retry.'}</h3><p>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</p>${stepsHTML(x)}<div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, true)}</div></div>`;
+  if (st === 'shown') fb = `<div class="fb no" role="status"><h3>The answer</h3><p><b>${x.c.rich ? fmtMath(x.c.a) : esc(x.c.a)}</b></p>${stepsHTML(x)}<p>This one will come back soon.</p><div class="acts"><button class="btn" id="nextbtn" data-act="g-next">${last ? 'Finish' : 'Next'}</button>${quizHelpHTML(x, false)}</div></div>`;
   const help = st === 'ask' || (st === 'choices' && !Q.typed) ? '<div class="help"><button class="link" data-act="g-show">I don’t know this one</button></div>' : '';
-  app.innerHTML = `<div class="rbar"><button class="link" data-act="g-home">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
-  <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}</div><div class="qtext">${esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
+  app.innerHTML = `<div class="rbar"><button class="link" data-act="${Q.path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">‹ End session</button><span class="progress">Question ${Q.i + 1} of ${Q.items.length}</span></div>
+  <div class="prob"><div class="eyebrow">${esc(x.g.title)}${x.c.topic ? ' &middot; ' + esc(x.c.topic) : ''}</div><div class="qtext">${x.c.rich ? fmtMath(x.c.q) : esc(x.c.q)}</div>${input}${help}${fb}${Q.askOpen && locked ? followHTML() : ''}</div>`;
   const nb = document.getElementById('nextbtn'), inp = document.getElementById('gans');
   if (nb) nb.focus(); else if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
+// The worked steps of a problem, shown with its answer.
+const stepsHTML = (x) => (x.c.steps && x.c.steps.length ? `<ol class="steps">${x.c.steps.map((t) => `<li>${fmtMath(t)}</li>`).join('')}</ol>` : '');
 // After a card is answered: ask the tutor about it, and watch a video on the topic.
 const quizHelpHTML = (x, lazy) => `${smp ? `<button class="link" data-act="follow">${Q.askOpen ? 'Hide follow-up' : 'Ask a follow-up'}</button>` : ''}${videosHTML(cardVideoQ(x), lazy)}`;
 // kind: 'first' (typed it right), 'retry' (right from the choices), 'miss' (had to be shown)
@@ -279,7 +282,7 @@ function renderQuizSummary() {
     <small>${plural(cardsMastered(), 'question')} of ${allCards().length} well learned so far.</small>
     <div class="acts">${path
       ? `${nxt ? `<button class="btn" id="nextbtn" data-act="g-sec" data-id="${nxt.g.id}" data-i="${nxt.i}">Next: ${esc(nxt.sec.heading)}</button>` : ''}<button class="${nxt ? 'link' : 'btn'}" ${nxt ? '' : 'id="nextbtn" '}data-act="g-secgo" data-id="${path.gid}" data-i="${path.i}">Try this section again</button>`
-      : `<button class="btn" id="nextbtn" data-act="g-quiz" data-id="${Q.guideId || ''}" data-ch="${Q.chapterId || ''}">Another round</button>`}<button class="link" data-act="g-home">Back to the course</button></div></div>`;
+      : `<button class="btn" id="nextbtn" data-act="g-quiz" data-id="${Q.guideId || ''}" data-ch="${Q.chapterId || ''}">Another round</button>`}<button class="link" data-act="${path ? 'g-leave' : 'g-home'}" data-ch="${Q.chapterId || ''}">Back to the course</button></div></div>`;
   document.getElementById('nextbtn').focus();
   Q = null;
 }
@@ -313,7 +316,8 @@ async function guideAct(act, t) {
   else if (act === 'g-build') gBuild();
   else if (act === 'g-stop') { if (GB.ctl) GB.ctl.abort(); }
   else if (act === 'g-quiz') startQuiz(id || null, t.dataset.ch || null);
-  else if (act === 'g-sec') showSection(id, +t.dataset.i);
+  else if (act === 'g-sec') openSection(id, +t.dataset.i);
+  else if (act === 'g-leave') leaveSection(t.dataset.ch);
   else if (act === 'g-secgo') startSectionQuiz(id, +t.dataset.i);
   else if (act === 'g-prep') prepareChapter(t.dataset.ch);
   else if (act === 'g-learn') go(chHash(t.dataset.ch, 'learn'));
