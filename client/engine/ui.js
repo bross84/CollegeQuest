@@ -163,7 +163,7 @@ function submit(raw) {
   if (!ok) {
     round.tries++; round.state = 'no'; round.typed = raw;
     if (p.type === 'choice') round.wrong.push(raw);
-    else if (S.style === 'both') showChoices(raw); // missed a typed answer: offer the choices
+    else showChoices(raw); // missed a typed answer: offer the choices
     return renderRound();
   }
   const kind = round.tries === 0 ? 'first' : 'retry';
@@ -174,7 +174,7 @@ function submit(raw) {
   renderRound();
 }
 // Turn the typed problem into multiple choice (same question, same answer). Does nothing when it has too few wrong answers to offer.
-const canChoices = (p) => p.type !== 'choice' && S.style !== 'type' && toChoice(p) !== p;
+const canChoices = (p) => p.type !== 'choice' && toChoice(p) !== p;
 function showChoices(typed) {
   const c = toChoice(round.p);
   if (c === round.p) return;

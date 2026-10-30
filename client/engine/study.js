@@ -208,7 +208,6 @@ function pickCards(guideId, chapterId) {
 // answer first when the class is set to typing.
 function qOpen() {
   const base = { typed: '', wrong: [], tries: 0, fb: null };
-  if (S.style === 'type') return Object.assign(Q, base, { state: 'ask', choices: null, ans: -1 });
   Object.assign(Q, base, { state: 'choices' }, buildChoices(Q.items[Q.i]));
 }
 function startQuiz(guideId, chapterId) {

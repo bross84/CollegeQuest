@@ -52,7 +52,7 @@ You may not need to. On first start the database upgrade (v14) re-reads every qu
 1. Sections: keep every section that has problems to match. No change, since that is how it works now.
 2. Done (`a1a3fb6`): each uploaded exam has a **View** button under Exams. It shows the exam as read, question by question, with the options or parts and the key, and a chapter picker on every question.
 3. Done (`af69bfe`): building a study guide reads the textbook's problems in the same AI call. "Prepare this chapter" now makes one pass instead of two. Exams are still read on the Exams page.
-4. Not decided. The setting only applies to built-in drills, which no subject has any more, so it does nothing today.
+4. Removed: the setting only applied to built-in drills, which no subject has any more.
 5. Done (`e24e346`): section practice uses your instructor's exam questions first, then textbook problems, then AI-written ones. AI-written problems are also modelled on exam questions first. The exam builder is unchanged.
 
 The original questions:

@@ -6,7 +6,6 @@ return {
   coreName: '',
   coreTitle: '',
   baseTitle: '',
-  hasChoiceMode: false,
   badInput: 'I couldn’t read that.',
   ph: {},
   fmt: (s) => esc(s).replace(/\^(\([^)]*\)|-?\w+)/g, (m, e) => `<sup>${e.replace(/^\(|\)$/g, '')}</sup>`).replace(/sqrt\(/g, '√('),

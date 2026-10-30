@@ -1,7 +1,7 @@
 // Game state, storage, scoring, and problem selection. No DOM in here.
 // The class being studied (name, exam, notes) and its subject pack (skills, wording). Set when a class is opened.
 let PACK = null, CLASS = null;
-const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, style: 'both', cards: {}, bank: {}, chats: {} });
+const fresh = () => ({ lastDay: null, streak: 0, best: 0, skills: {}, total: 0, right: 0, setDay: null, mine: [], sections: [], log: [], today: null, cards: {}, bank: {}, chats: {} });
 let S = fresh();
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -230,13 +230,10 @@ function toChoice(p) {
   const m = mc(correct, shuffle(w).slice(0, 3));
   return { ...p, q: p.q.replace(TYPING_HINT, ''), type: 'choice', choices: m.choices, answer: m.answer };
 }
-// Answer style: 'both' = type first (choices appear after a miss), 'type' = typed only, 'choice' = multiple choice only.
-const STYLES = ['both', 'type'];
-const STYLE_LABEL = { both: 'Answers: multiple choice', type: 'Answers: type first, choices after a miss', choice: 'Answers: multiple choice' };
 // A choice-only problem can carry a `typed` alternative ({ type, check or accept, hint, ... }). Used when answers are typed;
 // the original choices are kept in `alt` so a miss can still fall back to them.
 const asTyped = (p) => (p.type === 'choice' && p.typed ? { ...p, ...p.typed, q: p.q + (p.typed.hint || ''), alt: { choices: p.choices, answer: p.answer } } : p);
-const newProblem = (skill) => (S.style === 'choice' ? toChoice(skill.gen()) : asTyped(skill.gen()));
+const newProblem = (skill) => asTyped(skill.gen());
 
 // Edit distance (small strings), for forgiving a slipped letter in a typed name.
 function lev(a, b) {

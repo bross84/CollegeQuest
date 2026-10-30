@@ -41,7 +41,7 @@ function openClassForm(c) {
   // A new class starts with no generated practice and blank fields; a subject pack with its own starter text fills it in when picked.
   const first = c ? c.pack : 'general', p = metaOf(first).preset;
   CF = c
-    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, dates: c.dates.map((d) => ({ ...d })), refs: classRefs(c).map((r) => r.k), err: '', preset: null, style: CLASS && CLASS.id === c.id ? S.style : null }
+    ? { id: c.id, pack: c.pack, name: c.name, description: c.description, dates: c.dates.map((d) => ({ ...d })), refs: classRefs(c).map((r) => r.k), err: '', preset: null }
     : { id: null, pack: first, name: p.name, description: p.description, dates: [{ label: 'Class starts', date: '' }, { label: 'Final exam', date: '' }], refs: [], err: '', preset: p };
   delClassArmed = false;
   renderClassForm();
@@ -50,7 +50,6 @@ function syncCF() {
   const g = (id) => document.getElementById(id);
   if (!CF || !g('cf-name')) return;
   CF.name = g('cf-name').value; CF.description = g('cf-desc').value; CF.dates = [...document.querySelectorAll('.kdrow')].map((r) => ({ label: r.querySelector('.kd-l').value, date: r.querySelector('.kd-d').value }));
-  if (g('cf-style')) CF.style = g('cf-style').value;
   if (g('cf-name')) CF.refs = [...document.querySelectorAll('input[data-cfref]')].filter((i) => i.checked).map((i) => i.dataset.cfref);
 }
 function renderClassForm() {
@@ -69,8 +68,6 @@ function renderClassForm() {
     ${CF.dates.length < 12 ? '<div class="answer"><button class="link" data-act="c-adddate">+ Add a date</button></div>' : ''}
     <label class="field">Reference tables <small>(kept open under practice questions, and available from a button)</small></label>
     <div class="answer">${REF_DEFS.map((r) => `<label class="chk"><input type="checkbox" data-cfref="${r.k}" ${CF.refs.includes(r.k) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>
-    ${CF.style && PACK && PACK.hasChoiceMode ? `<label class="field" for="cf-style">Practice answers <small>(how problems in practice sets are answered)</small></label>
-      <select class="line" id="cf-style">${STYLES.map((k) => `<option value="${k}" ${CF.style === k ? 'selected' : ''}>${STYLE_LABEL[k].replace('Answers: ', '')}</option>`).join('')}</select>` : ''}
     ${CF.err ? `<div class="fb no" role="status"><p>${esc(CF.err)}</p></div>` : ''}
     <div class="answer"><button class="btn" data-act="c-save">${editing ? 'Save changes' : 'Create class'}</button></div></div>
   ${editing ? `<div class="skiprow"><button class="link" data-act="c-delete">${delClassArmed ? 'Really delete the class, its progress and documents? Click again' : 'Delete this class'}</button></div>` : ''}`;
@@ -84,7 +81,7 @@ async function saveClassForm() {
       const c = await api('PATCH', `/api/classes/${CF.id}`, body);
       CLASSES = CLASSES.map((x) => (x.id === c.id ? c : x));
       const inside = CLASS && CLASS.id === c.id;
-      if (inside) { CLASS = c; if (CF.style && CF.style !== S.style) { S.style = CF.style; save(); } }
+      if (inside) CLASS = c;
       CF = null;
       if (inside) renderHome(); else renderClasses();
     } else {
