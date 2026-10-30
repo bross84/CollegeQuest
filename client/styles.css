@@ -511,3 +511,14 @@ details.cls > summary:hover { background: color-mix(in srgb, var(--ink) 6%, tran
 .secrow { display: grid; grid-template-columns: 6.2em 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .secrow small { display: block; }
 .secrow .pill { justify-self: start; }
+.chpick { border-top: 1px solid var(--line); padding: 4px 0; }
+.chpick > summary { cursor: pointer; padding: 10px 0; }
+.chpick > summary small { margin-left: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.tile { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; cursor: pointer; }
+.tile:hover { border-color: var(--accent); }
+.tile .tname { font-weight: 600; line-height: 1.3; }
+.tile small { color: var(--muted); }
+.tile.working { border-color: var(--accent); }
+.tile.done { border-color: var(--good); }
+.tile.done small { color: var(--good); }

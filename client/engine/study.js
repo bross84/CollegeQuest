@@ -17,7 +17,7 @@ const cardRec = (id) => ((S.cards || (S.cards = {}))[id] || null);
 const allCards = () => GUIDES.flatMap((g) => g.cards.map((c, i) => ({ g, c, i, id: cardId(g, i) })));
 const cardsMastered = () => allCards().filter((x) => (cardRec(x.id) || {}).box >= 3).length;
 const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return dayKey(d); };
-const dueCount = (g) => g.cards.filter((c, i) => { const r = cardRec(cardId(g, i)); return !r || r.due <= dayKey(); }).length;
+const dueCount = (g) => g.cards.filter((c, i) => { const r = cardRec(cardId(g, i)); return r && r.due <= dayKey(); }).length; // questions already answered that are due again
 
 // ---- builder ----
 function renderBuilder() {

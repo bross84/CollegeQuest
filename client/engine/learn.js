@@ -92,6 +92,29 @@ function continueHTML() {
     : `<section class="zone cont"><div class="eyebrow">Get started</div><h2 class="gtitle">Upload a chapter</h2><small>Add the chapter’s text and it becomes short sections with questions.</small>
       <div class="acts"><a class="btn big" href="${chHash(CHAPTERS[0].id, 'materials')}">Upload materials</a></div></section>`;
 }
+const SEC_LABEL = { new: 'To do', working: 'In progress', done: 'Done', read: 'Read' };
+function secRowHTML(p) {
+  const st = secState(p);
+  return `<div class="secrow"><span class="pill ${st === 'done' ? 'done' : st === 'read' ? '' : 'todo'}">${SEC_LABEL[st]}</span>
+    <span><b>${esc(p.sec.heading)}</b><small>${p.cards.length ? plural(p.cards.length, 'question') : 'reading only'}</small></span>
+    <button class="btn alt sm" data-act="g-sec" data-id="${p.g.id}" data-i="${p.i}">${st === 'done' ? 'Again' : st === 'working' ? 'Continue' : 'Start'}</button></div>`;
+}
+// The course home: every chapter's sections as tiles, so you can start wherever you like.
+function tileHTML(p) {
+  const st = secState(p), note = st === 'done' ? 'Done' : st === 'working' ? 'In progress' : st === 'read' ? 'Reading' : plural(p.cards.length, 'question');
+  return `<button class="tile ${st}" data-act="g-sec" data-id="${p.g.id}" data-i="${p.i}"><span class="tname">${esc(p.sec.heading)}</span><small>${note}</small></button>`;
+}
+function startAnywhereHTML() {
+  if (!CHAPTERS.length) return '';
+  const list = pathList();
+  return CHAPTERS.map((ch) => {
+    const mine = list.filter((p) => p.ch.id === ch.id), hasDocs = DOCS.some((d) => d.chapterId === ch.id && d.chars && d.tag !== 'exam');
+    const body = mine.length ? `<div class="tiles">${mine.map(tileHTML).join('')}</div>`
+      : hasDocs ? `<div class="acts"><small>Not split into sections yet.</small><button class="btn alt sm" data-act="g-prep" data-ch="${ch.id}" ${smp ? '' : 'disabled'}>Prepare this chapter</button></div>`
+        : `<div class="acts"><small>No materials yet.</small><a class="btn alt sm" href="${chHash(ch.id, 'materials')}">Upload</a></div>`;
+    return `<section class="zone"><h3>${esc(ch.title)}</h3>${body}</section>`;
+  }).join('');
+}
 // A chapter's Learn tab: its sections with where you are in each.
 function learnTab(ch) {
   const list = pathList().filter((p) => p.ch.id === ch.id), docs = docsIn(ch).filter((d) => d.chars && d.tag !== 'exam');
@@ -101,14 +124,8 @@ function learnTab(ch) {
         <small>The AI reads the chapter once; a long one takes a few minutes. ${smp ? '' : 'It needs the AI, which isn’t set up on this server.'}</small></div>`
       : `<div class="empty"><p>No materials in this chapter yet.</p><a class="btn big" href="${chHash(ch.id, 'materials')}">Upload materials</a><small>Add the chapter’s text. Practice exams go on the Exams page.</small></div>`;
   }
-  const label = { new: 'To do', working: 'In progress', done: 'Done', read: 'Read' }, next = list.find(todo), due = chapterDue(ch.id);
-  const row = (p) => {
-    const st = secState(p);
-    return `<div class="secrow"><span class="pill ${st === 'done' ? 'done' : st === 'read' ? '' : 'todo'}">${label[st]}</span>
-      <span><b>${esc(p.sec.heading)}</b><small>${p.cards.length ? plural(p.cards.length, 'question') : 'reading only'}</small></span>
-      <button class="btn alt sm" data-act="g-sec" data-id="${p.g.id}" data-i="${p.i}">${st === 'done' ? 'Again' : st === 'working' ? 'Continue' : 'Start'}</button></div>`;
-  };
+  const next = list.find(todo), due = chapterDue(ch.id);
   return `${next ? `<div class="acts"><button class="btn big" data-act="g-sec" data-id="${next.g.id}" data-i="${next.i}">${secState(next) === 'working' ? 'Continue' : 'Start'}: ${esc(next.sec.heading)}</button></div>` : '<small>You’ve been through every section here.</small>'}
-    <section class="zone"><h3>Sections &middot; ${list.length}</h3>${list.map(row).join('')}</section>
+    <section class="zone"><h3>Sections &middot; ${list.length}</h3>${list.map(secRowHTML).join('')}</section>
     ${due ? `<div class="acts"><button class="btn alt" data-act="g-quiz" data-ch="${ch.id}">Review ${plural(due, 'question')} due</button></div>` : ''}`;
 }

@@ -95,7 +95,7 @@ function sidebarHTML(active) {
     ${searchBoxHTML()}
     ${a('overview', baseHash(), 'Overview')}
     <div class="slabel">Chapters</div>
-    ${CHAPTERS.map((c) => a('ch:' + c.id, chHash(c.id), esc(c.title), countPill(chapterDue(c.id), 'due'))).join('')}
+    ${CHAPTERS.map((c) => a('ch:' + c.id, chHash(c.id), esc(c.title))).join('')}
     ${unsortedCount() ? a('ch:unsorted', chHash('unsorted'), 'Unsorted', countPill(unsortedCount())) : ''}
     ${addChapterFormHTML()}
     <div class="slabel">Class</div>
@@ -112,7 +112,7 @@ function pickerHTML(active) {
     ${searchBoxHTML()}
     <select class="line" id="cpick" aria-label="Go to">
       ${opt('overview', baseHash(), 'Overview')}
-      <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title) + (chapterDue(c.id) ? ` (${chapterDue(c.id)} due)` : ''))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
+      <optgroup label="Chapters">${CHAPTERS.map((c) => opt('ch:' + c.id, chHash(c.id), esc(c.title))).join('')}${unsortedCount() ? opt('ch:unsorted', chHash('unsorted'), 'Unsorted') : ''}</optgroup>
       <optgroup label="Class">${opt('hw', routeHash('hw'), 'Homework')}${SKILLS.length ? opt('sets', routeHash('sets'), 'Practice sets') : ''}${opt('exams', routeHash('exams'), 'Exams')}${opt('docs', routeHash('docs'), 'All documents')}</optgroup>
     </select>${SB.adding ? addChapterFormHTML() : '<button class="btn alt sm" data-act="ch-add">+ Chapter</button>'}</div>`;
 }
@@ -122,33 +122,12 @@ function shell(active, main) {
 
 // ---- overview ----
 function overviewHTML() {
-  const dueRows = [];
-  if (SKILLS.length) {
-    const done = setDoneToday();
-    dueRows.push(`<li><span><b>${done ? 'Practice set done for today' : 'Today’s practice set'}</b> <small>five problems${done ? ', another is optional' : ''}</small></span><button class="link" data-act="practice">${done ? 'Another set' : 'Start'}</button></li>`);
-  }
-  [...CHAPTERS, ...(unsortedCount() ? [UNSORTED] : [])].forEach((c) => {
-    const n = chapterDue(c.id);
-    if (n) dueRows.push(`<li><span><b>${esc(c.title)}</b> <small>${plural(n, 'recall question')} due</small></span><a class="link" href="${chHash(c.id, 'practice')}">Review</a></li>`);
-  });
-  const openHw = S.mine.filter((m) => m.status !== 'done').length;
-  if (openHw) dueRows.push(`<li><span><b>Homework</b> <small>${plural(openHw, 'problem')} open</small></span><a class="link" href="${routeHash('hw')}">Open</a></li>`);
-  const due = `<section class="zone due"><h3>Due today</h3>${dueRows.length ? `<ul class="blocks">${dueRows.join('')}</ul>` : `<small>Nothing is due. ${CHAPTERS.length ? 'Pick a chapter to keep going.' : 'Add a chapter to get started.'}</small>`}</section>`;
-  const chapterCard = (c) => {
-    const n = c.unsorted ? 0 : chapterDue(c.id), cnt = c.unsorted ? { docs: DOCS.filter((d) => !d.chapterId).length, guides: GUIDES.filter((g) => !g.chapterId).length, problems: 0 } : c.counts;
-    const bits = [cnt.docs ? plural(cnt.docs, 'document') : '', cnt.guides ? plural(cnt.guides, 'guide') : '', cnt.problems ? plural(cnt.problems, 'problem') : ''].filter(Boolean);
-    return `<a class="mine-item chcard" href="${chHash(c.id)}"><span><b>${esc(c.title)}</b><small>${bits.join(' · ') || 'Empty so far'}</small></span>${n ? `<span class="pill todo">${plural(n, 'question')} due</span>` : ''}</a>`;
-  };
-  const list = [...CHAPTERS, ...(unsortedCount() ? [UNSORTED] : [])];
-  const chapters = `<section class="zone"><h3>Chapters${CHAPTERS.length ? ` &middot; ${CHAPTERS.length}` : ''}</h3>${list.length ? `<div class="mine chlist">${list.map(chapterCard).join('')}</div>` : ''}
-    ${CHAPTERS.length ? '' : `<div class="empty"><p>Chapters hold the materials, study guide, practice and tutor for one part of the course.</p><button class="btn big" data-act="ch-add">Add your first chapter</button></div>`}</section>`;
-  TUTOR_CTX = { id: 'class', title: 'Course overview' };
-  const tutor = `<section class="zone"><h3>Ask the tutor</h3>${followHTML({ title: 'About the whole course', placeholder: `Ask anything about ${CLASS.name}…` })}</section>`;
   return `<h1 class="ptitle">${esc(CLASS.name)}</h1>
   ${examHTML()}
   ${continueHTML()}
-  <div class="ovcols"><div class="ovcol">${due}${SKILLS.length ? todayHTML() + coachHTML() : ''}${tutor}</div><div class="ovcol">${chapters}</div></div>
-  <div class="foot"><span>${standLine()} <small id="syncnote">${syncNote()}</small></span>
+  ${SKILLS.length ? `<div class="ovcols"><div class="ovcol">${todayHTML()}${coachHTML()}</div></div>` : ''}
+  ${startAnywhereHTML()}
+  <div class="foot"><span><small id="syncnote">${syncNote()}</small></span>
     <span>${AUTH.required ? '<button class="link" data-act="c-logout">Sign out</button> ' : ''}<button class="link" data-act="reset">${resetArmed ? 'Really erase all progress? Click again' : 'Reset progress'}</button></span></div>`;
 }
 
