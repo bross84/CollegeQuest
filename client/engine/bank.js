@@ -37,7 +37,7 @@ function ensureProblems() {
   BK.loading = true;
   loadProblems().catch(() => { PROBS = { none: [] }; PLOADED = true; }).then(() => { BK.loading = false; paintBank(); if (ROUTE && (ROUTE.view === 'overview' || (ROUTE.view === 'chapter' && ROUTE.tab === 'learn'))) renderRoute(true); });
 }
-const onPractice = () => ROUTE && ((ROUTE.view === 'chapter' && ROUTE.tab === 'practice') || ROUTE.view === 'exams');
+const onPractice = () => ROUTE && ((ROUTE.view === 'chapter' && ROUTE.tab === 'practice') || ROUTE.view === 'exams' || ROUTE.view === 'examdoc');
 const paintBank = () => { if (onPractice()) renderRoute(true); };
 const sourceDocs = () => DOCS.filter((d) => d.chars);
 // Source documents that have problems in the bank, for choosing what a practice exam draws from.
@@ -97,7 +97,7 @@ function bankEnd(msg, e) {
   paintBank();
 }
 const bankWait = () => (s) => { BK.note = `Waiting for the AI quota (${s}s)…`; paintBank(); };
-const bankHome = (where) => go(where ? chHash(where, 'practice') : routeHash('exams'));
+const bankHome = (where) => (!where && ROUTE && ROUTE.view === 'examdoc' ? renderRoute(true) : go(where ? chHash(where, 'practice') : routeHash('exams')));
 
 // Read problems out of documents. A document that sits in a chapter and isn't an exam gives that chapter its problems;
 // an exam (or a document with no chapter) is read as covering several chapters, and each problem is filed by the AI.
@@ -381,7 +381,7 @@ function examsHTML() {
     const n = allProblems().filter((p) => p.sourceDoc === d.id && p.kind === 'original').length;
     return `<div class="docrow"><div class="dtop"><span class="dk">${KIND_LABEL[d.kind]}</span>${d.tag ? `<span class="dk tag-${d.tag}">${TAG_LABEL[d.tag]}</span>` : ''}<a class="dn" href="/api/docs/${d.id}/file" target="_blank" rel="noopener">${esc(d.name)}</a>
         <small>${n ? plural(n, 'problem') + ' read' : 'not read yet'}</small></div>
-      <div class="dact">${n ? `<button class="btn alt sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${n ? 'Read again' : 'Read its problems'}</button>` : ''}</div></div>`;
+      <div class="dact">${n ? `<a class="btn alt sm" href="${routeHash('exams')}/${d.id}">View</a><button class="btn alt sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${n ? 'Read again' : 'Read its problems'}</button>` : ''}</div></div>`;
   };
   const loose = PROBS.none || [];
   const exQs = allProblems().filter((p) => p.kind === 'original' && srcOf(p) === 'exam'), matched = exQs.filter((p) => (p.links || []).length).length;
@@ -402,10 +402,35 @@ function examsHTML() {
     <div class="mine plist">${loose.map((p) => `<div class="prow"><button class="mine-item" data-act="b-open" data-id="${p.id}"><span class="mtext">${fmtMath(p.text)}</span></button>
       <select class="line sm" data-pmove="${p.id}" aria-label="Chapter"><option value="">Choose a chapter</option>${CHAPTERS.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div>`).join('')}</div></section></details>` : ''}`;
 }
+// An uploaded exam as it was read: every question in order with its options or parts and the key, each with a chapter
+// picker, so a question the AI filed under the wrong chapter can be moved.
+const docQuestions = (docId) => {
+  const qs = allProblems().filter((p) => p.sourceDoc === docId && p.kind === 'original').sort((a, b) => a.createdAt - b.createdAt);
+  const num = (p) => parseFloat(refOf(p));
+  return qs.every((p) => !isNaN(num(p))) ? qs.sort((a, b) => num(a) - num(b)) : qs; // numbered questions go in their printed order
+};
+function examDocHTML(docId) {
+  ensureProblems();
+  const d = DOCS.find((x) => x.id === docId), head = `<div class="rbar"><a class="link" href="${routeHash('exams')}">‹ All exams</a></div><h1 class="ptitle">${esc(d.name)}</h1>`;
+  if (!PLOADED) return `${head}<small>Loading…</small>`;
+  const qs = docQuestions(docId), off = BK.busy ? 'disabled' : '';
+  const acts = `<div class="acts">${qs.length ? `<button class="btn sm" data-act="b-exdoc" data-id="${d.id}">Take as an exam</button>` : ''}<a class="btn alt sm" href="/api/docs/${d.id}/file" target="_blank" rel="noopener">Open the original</a>${smp ? `<button class="btn alt sm" data-act="b-build" data-id="${d.id}" ${off}>${qs.length ? 'Read again' : 'Read its problems'}</button>` : ''}</div>`;
+  if (!qs.length) return `${head}${bkStatusHTML()}<p class="lead">No questions have been read from this exam yet.</p>${acts}`;
+  return `${head}${bkStatusHTML()}<p class="lead">${plural(qs.length, 'question')}, as read from your upload. If one is filed under the wrong chapter, pick the right one. If one was read wrong, open the original to compare, then try Read again.</p>${acts}
+  ${qs.map((p, i) => {
+    const opts = optionsOf(p), parts = partsOf(p), key = opts ? keyIndex(p, opts) : -1, pkeys = parts && partKeys(p.answer, parts.length), ref = refOf(p) || String(i + 1);
+    const keyLine = !p.answer ? '<small>No answer key.</small>' : key >= 0 || pkeys ? '' : `<small>Key: ${esc(p.answer)}${p.aiKey ? ' (worked out by the AI, so double-check it)' : ''}</small>`;
+    return `<div class="prob exq"><div class="eyebrow">Question ${esc(ref)}</div><div class="qtext">${fmtMath(p.text)}</div>
+      ${parts ? `<div class="parts">${parts.map((c, k) => `<div class="part"><span class="ol">${'abcdefgh'[k]})</span><span class="ptext">${fmtMath(c)}</span><span class="pans">${pkeys ? `<small>Key: ${esc(pkeys[k])}</small>` : ''}</span></div>`).join('')}</div>`
+        : opts ? `<div class="opts">${opts.map((c, k) => `<div class="opt ${k === key ? 'key' : ''}"><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></div>`).join('')}</div>` : ''}
+      ${keyLine}
+      <div class="answer"><label class="field" for="pm-${p.id}">Chapter</label><select class="line sm" id="pm-${p.id}" data-pmove="${p.id}">${chapterOptions(p.chapterId || '')}</select></div></div>`;
+  }).join('')}`;
+}
 app.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.dataset && t.dataset.pmove && t.matches('select') && t.value) {
-    try { await api('PATCH', `/api/problems/${t.dataset.pmove}`, { chapterId: t.value }); await loadProblems(); await loadChapters(); } catch (err) { BK.err = err.message; }
+  if (t.dataset && t.dataset.pmove && t.matches('select')) {
+    try { await api('PATCH', `/api/problems/${t.dataset.pmove}`, { chapterId: t.value || null }); await loadProblems(); await loadChapters(); } catch (err) { BK.err = err.message; }
     renderRoute(true);
   }
 });
