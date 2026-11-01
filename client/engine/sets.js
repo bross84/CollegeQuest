@@ -135,7 +135,9 @@ async function scanTopics() {
 // ---- building ----
 // o: { kind: 'chapter'|'exam', chapterIds, title, size, mix, tplId, focus, from, where }
 // focus: a topic (e.g. "polyatomic ions") whose instructor questions are pulled in whole, from the exam document `from` or any exam; the rest follows the model exam and chapters.
-async function buildSet(o) {
+// setId: when refreshing a saved set, its id — updated in place instead of creating a new one, and its current
+// problems are avoided when there's enough else to choose from, so a refresh doesn't just hand back the same set.
+async function buildSet(o, setId) {
   if (BK.busy) return;
   if (!smp) { BK.err = 'Building a set needs the AI, which isn’t set up on this server.'; return bankHome(o.where); }
   bankBegin(o.where);
@@ -168,6 +170,11 @@ async function buildSet(o) {
       pool = pool.filter((p) => !forced.includes(p));
     }
     if (!pool.length && !forced.length) throw Object.assign(new Error('I couldn’t find any problems in the materials for this. Upload a practice exam or the text with its problems, and try again.'), { code: 'none' });
+    if (setId) { // a refresh: prefer problems not already in the set being replaced, when there's enough else to choose from
+      const avoid = new Set(((SETS.find((s) => s.id === setId) || {}).items || []).map((it) => it.id));
+      const fresh = pool.filter((p) => !avoid.has(p.id));
+      if (fresh.length >= Math.min(pool.length, Math.max(3, o.size - forced.length))) pool = fresh;
+    }
 
     // choose representative problems
     const n = Math.max(3, Math.min(o.size, 60)), m = SMIX[o.mix] || SMIX.like;
@@ -230,11 +237,13 @@ async function buildSet(o) {
     made.forEach((q) => { fmtById[q.id] = q.format || 'work'; });
     const modelOrder = [...new Set(tplQs.map((p) => p.format || 'work'))], rankF = (it) => { const k = modelOrder.indexOf(fmtById[it.id] || 'work'); return k < 0 ? 99 : k; };
     const ordered = o.kind === 'exam' ? (modelOrder.length > 1 ? shuffle(items).sort((a, b) => rankF(a) - rankF(b)) : shuffle(items)) : items;
-    const set = await api('POST', `/api/classes/${CLASS.id}/sets`, { title: o.title, kind: o.kind, chapterIds: o.chapterIds, items: ordered });
-    SETS.unshift(set);
+    const opts = { chapterIds: o.chapterIds, tplId: o.tplId, focus: o.focus, from: o.from, size: o.size, mix: o.mix, prompt: o.prompt };
+    const payload = { title: o.title, kind: o.kind, chapterIds: o.chapterIds, items: ordered, opts };
+    const set = setId ? await api('PATCH', `/api/sets/${setId}`, payload) : await api('POST', `/api/classes/${CLASS.id}/sets`, payload);
+    SETS = setId ? SETS.map((s) => (s.id === setId ? set : s)) : [set, ...SETS];
     await loadProblems(); await loadChapters();
-    bankEnd(`Built “${set.title}” with ${plural(set.items.length, 'problem')}: ${breakdown(set.items)}.`);
-  } catch (e) { await loadProblems().catch(() => {}); bankEnd('', e); }
+    await bankEnd(`${setId ? 'Refreshed' : 'Built'} “${set.title}” with ${plural(set.items.length, 'problem')}: ${breakdown(set.items)}.`);
+  } catch (e) { await loadProblems().catch(() => {}); await bankEnd('', e); }
 }
 
 // ---- mirroring: an exam built as a 1:1 parallel of an uploaded one, question for question ----
@@ -322,21 +331,51 @@ async function mirrorSet(o, setId) {
     }
     items.forEach((x) => { if (x.bookId) x.item = { id: x.bookId, src: 'book', key: keys[x.bookId] || '' }; else if (!x.item) x.item = { id: x.slot.id, src: 'exam', key: '' }; }); // the AI never produced one: fall back to the original question itself
 
-    const payload = { title: o.title, kind: 'exam', chapterIds: o.chapterIds, items: items.map((x) => x.item), opts: { tplId: o.tplId, chapterIds: o.chapterIds, focus: o.focus, from: o.from } };
+    const payload = { title: o.title, kind: 'exam', chapterIds: o.chapterIds, items: items.map((x) => x.item), opts: { tplId: o.tplId, chapterIds: o.chapterIds, focus: o.focus, from: o.from, prompt: o.prompt } };
     const set = setId ? await api('PATCH', `/api/sets/${setId}`, payload) : await api('POST', `/api/classes/${CLASS.id}/sets`, payload);
     SETS = setId ? SETS.map((s) => (s.id === setId ? set : s)) : [set, ...SETS];
     await loadProblems(); await loadChapters();
-    bankEnd(`${setId ? 'Refreshed' : 'Built'} “${set.title}” with ${plural(set.items.length, 'problem')}: ${breakdown(set.items)}.`);
-  } catch (e) { await loadProblems().catch(() => {}); bankEnd('', e); }
+    await bankEnd(`${setId ? 'Refreshed' : 'Built'} “${set.title}” with ${plural(set.items.length, 'problem')}: ${breakdown(set.items)}.`);
+  } catch (e) { await loadProblems().catch(() => {}); await bankEnd('', e); }
 }
 
 // ---- using a set ----
-function takeSet(id) {
-  const s = SETS.find((x) => x.id === id);
-  if (!s) return;
-  const items = setProblems(s);
+// Rebuilds a saved set the same way it was first built (its opts remember the model exam, chapters, focus, size and
+// mix), favouring problems not already in it. Used by the Refresh button, and to rotate a set each time it's taken.
+function refreshSet(s) {
+  return s.opts.tplId
+    ? mirrorSet({ ...s.opts, title: s.title, where: null }, s.id)
+    : buildSet({ ...s.opts, kind: s.kind, title: s.title, where: null }, s.id);
+}
+const setIsBuilt = (s) => !!(s.opts && Object.keys(s.opts).length);
+async function takeSet(id) {
+  const before = SETS.find((x) => x.id === id);
+  if (!before) return;
+  if (smp && !BK.busy && setIsBuilt(before)) await refreshSet(before);
+  const s = SETS.find((x) => x.id === id) || before, items = setProblems(s);
   if (!items.length) { BK.err = 'Those problems have been deleted from the bank.'; return renderRoute(true); }
-  exRun(s.title, items, +(document.getElementById('ext') || {}).value || minutesFor(items.length), null);
+  exRun(s.title, items, +(document.getElementById('ext') || {}).value || minutesFor(items.length), null, s.id);
+}
+// A single AI-written replacement for one problem in a set, modelled closely on it. No BK/busy state of its own —
+// callers (the per-question "Swap" button, mid-exam) manage that themselves so taking an exam is never interrupted.
+async function regenProblem(p, ctl, onWait = () => {}) {
+  const seen = new Set(allProblems().map((x) => normText(x.text)));
+  const v = await aiJson(`${rules()}\n\nBelow is a practice problem. Write ONE new problem modelled closely on it: the same type, topic and difficulty, but different numbers, names or wording. Do not copy the original. `
+    + 'Keep its answer format: a multiple-choice problem gets four options in "choices" with the correct one’s text in "answer"; a multi-part problem gets the same number of parts in "parts" with "format":"parts" and "answer" written "a) ... b) ..."; a written problem gets no options. '
+    + `Work it out carefully and double-check the answer. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"text":"the new problem","format":"${p.format || 'work'}","choices":[],"answer":"the final answer","steps":["one short step"]}\n\nProblem: ${p.text.replace(/\s+/g, ' ').slice(0, 400)}`
+    + (p.format === 'mc' ? `\nIts options: ${(p.choices || []).join(' | ')}` : p.format === 'parts' ? `\nIts parts: ${(p.choices || []).join(' | ')}` : ''), ctl, onWait, 1200);
+  const sh = mixChoices(shapeProblem({ ...v, format: (v && v.format) || p.format }));
+  if (!sh.text || (sh.format === 'mc' && keyIndex(sh, sh.choices) < 0) || seen.has(normText(sh.text))) throw Object.assign(new Error('Couldn’t write a new version of that question. Try again.'), { code: 'none' });
+  const posted = await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: [{ kind: 'similar', text: sh.text, answer: sh.answer, format: sh.format, choices: sh.choices, steps: (Array.isArray(v && v.steps) ? v.steps : []).map(String), topic: p.topic, sourceDoc: p.sourceDoc, chapterId: p.chapterId }] });
+  return posted[0];
+}
+// Saves a swapped-in problem to the set itself (not just the exam in progress), at the same slot.
+async function saveSwap(setId, idx, newId) {
+  const s = SETS.find((x) => x.id === setId);
+  if (!s) return;
+  const items = s.items.map((it, i) => (i === idx ? { id: newId, src: 'ai', key: '' } : it));
+  const updated = await api('PATCH', `/api/sets/${setId}`, { items });
+  SETS = SETS.map((x) => (x.id === setId ? updated : x));
 }
 // Opens a printable page: the questions with room to write, then the answer key on its own page.
 function printSet(id) {
@@ -360,8 +399,9 @@ const sizeOptions = (cur) => SET_SIZES.map((n) => `<option value="${n}" ${n === 
 const setMissing = (s) => s.items.length - setProblems(s).length;
 function setRowHTML(s) {
   const items = setProblems(s), gone = setMissing(s), when = new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const canRefresh = s.kind === 'exam' && s.opts && s.opts.tplId && smp;
-  return `<div class="docrow"><div class="dtop"><b>${esc(s.title)}</b><small>${plural(items.length, 'problem')} &middot; ${breakdown(items) || 'empty'} &middot; ${when}</small>${gone ? `<small class="warn">${plural(gone, 'question')} gone</small>` : ''}</div>
+  const canRefresh = setIsBuilt(s) && smp;
+  return `<div class="docrow"><div class="dtop"><b>${esc(s.title)}</b><small>${plural(items.length, 'problem')} &middot; ${breakdown(items) || 'empty'} &middot; ${when}</small>${gone ? `<small class="warn">${plural(gone, 'question')} gone</small>` : ''}
+    ${s.opts && s.opts.prompt ? `<small class="prompt">“${esc(s.opts.prompt)}”</small>` : ''}${canRefresh ? '<small>Rotates with new problems each time you take it.</small>' : ''}</div>
     <div class="dact"><button class="btn alt sm" data-act="b-settake" data-id="${s.id}">Take it</button>${canRefresh ? `<button class="btn alt sm" data-act="b-setrefresh" data-id="${s.id}" ${BK.busy ? 'disabled' : ''}>Refresh questions</button>` : ''}<button class="btn alt sm" data-act="b-setprint" data-id="${s.id}">Print</button>
       <button class="link" data-act="b-setdel" data-id="${s.id}">${SS.delId === s.id ? 'Really delete? Click again' : 'Delete'}</button></div></div>`;
 }
@@ -385,6 +425,7 @@ function examBuilderHTML(list) {
     <small class="topichint">${topics.length ? `${plural(topics.length, 'topic')} from your chapters. Pick one to pull that topic’s questions into the exam, from the exam chosen above.` : 'No topic list yet. The AI can read your chapters and list what each one teaches, so you can pick from it.'}
       ${smp && CHAPTERS.length ? `<button class="link" data-act="b-topics" ${BK.busy ? 'disabled' : ''}>${CLASS.topics && CLASS.topics.length ? 'Find topics again' : 'Find topics in my chapters'}</button>` : ''}</small>
     <div class="answer"><button class="btn" data-act="b-xbuild" ${BK.busy || !smp || !CHAPTERS.length ? 'disabled' : ''}>Build my exam</button></div>
+    ${smp && CHAPTERS.length ? promptBuilderHTML() : ''}
     ${bkStatusHTML()}
     ${smp ? '' : '<small class="warn">Building needs the AI, which isn’t set up on this server.</small>'}</section>`;
 }
@@ -400,7 +441,7 @@ async function setAct(act, t) {
   if (act === 'b-topics') return scanTopics();
   if (act === 'b-settake') return takeSet(id);
   if (act === 'b-setprint') return printSet(id);
-  if (act === 'b-setrefresh') { const s = SETS.find((x) => x.id === id); return s && mirrorSet({ ...s.opts, title: s.title, where: null }, s.id); }
+  if (act === 'b-setrefresh') { const s = SETS.find((x) => x.id === id); return s && refreshSet(s); }
   if (act === 'b-setdel') {
     if (SS.delId !== id) { SS.delId = id; return renderRoute(true); }
     try { await api('DELETE', `/api/sets/${id}`); SETS = SETS.filter((s) => s.id !== id); } catch (e) { BK.err = e.message; }
@@ -417,6 +458,7 @@ async function setAct(act, t) {
       ? mirrorSet({ chapterIds: ids, tplId: SS.tpl, focus, from: SS.from, title, where: null })
       : buildSet({ kind: 'exam', chapterIds: ids, tplId: SS.tpl, focus, from: SS.from, title, size: SS.xsize, mix: SS.mix, where: null });
   }
+  if (act === 'b-promptbuild') { const ta = document.getElementById('xprompt'); return promptBuild(ta ? ta.value : SP.text); }
 }
 app.addEventListener('change', (e) => {
   const t = e.target;
@@ -425,3 +467,48 @@ app.addEventListener('change', (e) => {
     if (t.dataset.ss === 'tpl') { tickChapters(t.value); renderRoute(true); }
   }
 });
+
+// ---- building from a plain description, instead of the dropdowns above ----
+// "Use chapter 5 and the questions from Exam 2, give me 20 questions mostly from the textbook" -> the same
+// {chapterIds, tplId, focus, from, size, mix} the dropdown builder would have set, read off by the AI.
+let SP = { text: '', busy: false, note: '', err: '' };
+const promptBuilderHTML = () => `<div class="xrow"><label class="fld" style="flex:1"><small>…or just describe it</small>
+    <textarea class="line" id="xprompt" rows="2" maxlength="300" placeholder="e.g. Use chapter 5 and the polyatomic ion question from Exam 1, give me 20 mostly from the text" ${SP.busy ? 'disabled' : ''}>${esc(SP.text)}</textarea></label></div>
+  <div class="answer"><button class="btn alt" data-act="b-promptbuild" ${SP.busy || BK.busy || !smp ? 'disabled' : ''}>${SP.busy ? esc(SP.note || 'Reading…') : 'Build from that'}</button></div>
+  ${SP.err ? `<div class="fb no" role="status"><p>${esc(SP.err)}</p></div>` : ''}`;
+async function promptBuild(text) {
+  text = String(text || '').trim().slice(0, 300);
+  SP.text = text;
+  if (!text || BK.busy || SP.busy) return renderRoute(true);
+  if (!smp) { BK.err = 'Describing a quiz needs the AI, which isn’t set up on this server.'; return renderRoute(true); }
+  SP.busy = true; SP.err = ''; SP.note = 'Reading your description…'; renderRoute(true);
+  const ctl = new AbortController();
+  try {
+    const tpls = sourceDocs().filter((d) => d.tag === 'exam');
+    const chLines = CHAPTERS.map((c, i) => `${i + 1}. ${c.title}`).join('\n') || '(none yet)';
+    const docLines = tpls.map((d, i) => `${i + 1}. ${d.name}`).join('\n') || '(none uploaded)';
+    const r = await aiJson(`${rules()}\n\nA student studying "${CLASS.name}" typed this request for a practice quiz:\n"${text}"\n\n`
+      + `Their chapters:\n${chLines}\n\nTheir uploaded exams:\n${docLines}\n\n`
+      + 'Work out: which chapters it covers, by number (an empty list means all of them); which uploaded exam, if any, it should be modelled on question for question (its number, or null for none); '
+      + 'a short topic it should also pull in questions about, if they named one (else ""); which uploaded exam that topic’s questions should come from, if they said (its number, or null for any exam); '
+      + 'how many questions it should have (10 to 40; ignored when a model exam is picked); and the mix they want: "exam" for mostly the instructor’s own questions, "book" for more from the textbook, "fresh" for mostly new AI-written ones, or "like" for an even mix (the default). Also write a short title (4 to 8 words).\n\n'
+      + 'Reply with only this JSON:\n{"chapterIds":[1],"tplId":null,"focus":"","from":null,"size":20,"mix":"like","title":"a short title"}',
+      ctl, (s) => { SP.note = `Waiting for the AI quota (${s}s)…`; renderRoute(true); }, 500);
+    const pick = (n, list) => { const x = list[(+n || 0) - 1]; return x ? x.id : ''; };
+    const chapterIds = (Array.isArray(r && r.chapterIds) ? r.chapterIds : []).map((n) => pick(n, CHAPTERS)).filter(Boolean);
+    const tplId = pick(r && r.tplId, tpls), from = pick(r && r.from, tpls);
+    const focus = String((r && r.focus) || '').trim().slice(0, 100);
+    const size = Math.max(10, Math.min(+(r && r.size) || 20, 40));
+    const mix = ['exam', 'book', 'fresh', 'like'].includes(r && r.mix) ? r.mix : 'like';
+    const title = String((r && r.title) || '').trim().slice(0, 120) || text.slice(0, 60);
+    const ids = chapterIds.length ? chapterIds : CHAPTERS.map((c) => c.id);
+    SS.tpl = tplId; SS.focus = focus; SS.from = from; SS.xsize = size; SS.mix = mix; XS.ch = new Set(ids);
+    SP = { text: '', busy: false, note: '', err: '' };
+    const o = { chapterIds: ids, tplId, focus, from, size, mix, title, prompt: text, where: null };
+    return tplId ? mirrorSet(o) : buildSet({ kind: 'exam', ...o });
+  } catch (e) {
+    SP.busy = false; SP.note = '';
+    SP.err = e && e.code !== 'cancelled' ? mineErr(e) : '';
+    renderRoute(true);
+  }
+}

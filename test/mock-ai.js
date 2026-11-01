@@ -67,6 +67,16 @@ function answer(p) {
     });
     return { problems: list };
   }
+  if (p.includes('typed this request for a practice quiz')) {
+    const chapters = numbered(after(p, 'Their chapters:\n')), docs = numbered(after(p, 'Their uploaded exams:\n'));
+    return { chapterIds: chapters.length ? [1] : [], tplId: docs.length ? 1 : null, focus: '', from: null, size: 20, mix: 'like', title: 'Mock quiz from a description' };
+  }
+  if (p.includes('Below is a practice problem. Write ONE new problem modelled closely on it')) {
+    if (/Its options:/.test(p)) return { text: 'Mock swapped question: which is right?', format: 'mc', choices: ['alpha', 'beta', 'gamma', 'delta'], answer: 'beta', steps: ['think'] };
+    const parts = (p.match(/Its parts: ([^\n]*)/) || [])[1];
+    if (parts) return { text: 'Mock swapped multi-part question.', format: 'parts', parts: parts.split('|').map((x, j) => `swapped part ${j + 1}`), answer: '', steps: [] };
+    return { text: 'Mock swapped written question.', format: 'work', choices: [], answer: '7', steps: ['step'] };
+  }
   if (p.includes('multiple-choice practice problems for the section')) {
     const k = +((p.match(/Write (\d+) multiple-choice/) || [])[1] || 3);
     return { problems: Array.from({ length: k }, (_, i) => ({ text: `Mock section question ${i + 1}?`, choices: ['one', 'two', 'three', 'four'], answer: 'two', steps: ['count'] })) };

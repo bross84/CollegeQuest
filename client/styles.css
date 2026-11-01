@@ -232,6 +232,7 @@ sub, sup { line-height: 0; }
 .docrow .dk { font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 .docrow .dact { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
 .docrow .warn { color: var(--accent-deep); }
+.docrow .prompt { font-style: italic; color: var(--muted); width: 100%; }
 .chk { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--muted); }
 [hidden] { display: none !important; }
 
@@ -350,6 +351,7 @@ select.line.sm { padding: 6px 10px; font-size: .9rem; }
 .pill.todo { color: var(--accent); border-color: var(--accent); }
 .examset { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
 .exq { display: flex; flex-direction: column; gap: 10px; }
+.exqhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .prob.exq { margin-top: 14px; }
 .sum + .prob { margin-top: 14px; }
 

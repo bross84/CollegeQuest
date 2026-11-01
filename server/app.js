@@ -486,10 +486,14 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
   // ---- study sets: a saved list of bank problems (a chapter's study set, or an exam built across chapters) ----
   const SRC = ['exam', 'book', 'ai'];
   const setOut = (r) => ({ id: r.id, classId: r.class_id, kind: r.kind, title: r.title, chapterIds: JSON.parse(r.chapter_ids), items: JSON.parse(r.items), opts: JSON.parse(r.opts || '{}'), createdAt: r.created_at });
-  // Build options kept so an exam set can be rebuilt with fresh questions later (the model exam, its chapters, a focus topic).
+  // Build options kept so a set can be rebuilt with fresh questions later (the model exam, its chapters, a focus topic,
+  // the size/mix for a sampled set, and the prompt that described it, if it was built from one).
+  const MIX_KEYS = ['like', 'exam', 'book', 'fresh'];
   const optsOut = (classId, o) => (o && typeof o === 'object' ? {
     tplId: clip(o.tplId, 40), chapterIds: (Array.isArray(o.chapterIds) ? o.chapterIds : []).map((c) => chapterOf(classId, c)).filter(Boolean),
     focus: clip(o.focus, 100), from: clip(o.from, 40),
+    size: Math.max(0, Math.min(+o.size || 0, 60)), mix: MIX_KEYS.includes(o.mix) ? o.mix : '',
+    prompt: clip(o.prompt, 400),
   } : {});
   const setsOf = (classId, body) => {
     const items = Array.isArray(body && body.items) ? body.items : [], mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(classId).map((r) => r.id));

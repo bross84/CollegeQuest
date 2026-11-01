@@ -91,10 +91,14 @@ function bankBegin(where) {
   BK.busy = true; BK.err = ''; BK.msg = ''; BK.ctl = new AbortController(); BK.note = 'Starting…';
   if (!onPractice()) go(where ? chHash(where, 'practice') : routeHash('exams')); else paintBank();
 }
+// Returns a promise that settles once the trailing chapter-counts refresh has painted too, for a caller (a refresh
+// that's about to hand off to something else, like taking the set it just rebuilt) that needs to wait for that —
+// otherwise it can land after the hand-off and paint over it. Callers that don't care can ignore it, as before.
 function bankEnd(msg, e) {
   BK.busy = false; BK.msg = msg || ''; BK.err = e && e.code !== 'cancelled' ? mineErr(e) : '';
-  loadChapters().then(() => paintBank());
+  const settled = loadChapters().then(() => paintBank());
   paintBank();
+  return settled;
 }
 const bankWait = () => (s) => { BK.note = `Waiting for the AI quota (${s}s)…`; paintBank(); };
 const bankHome = (where) => (!where && ROUTE && ROUTE.view === 'examdoc' ? renderRoute(true) : go(where ? chHash(where, 'practice') : routeHash('exams')));
@@ -245,7 +249,7 @@ async function bankSimilar(origs, n, chId) {
 const clearBtn = (which, label) => `<button class="link" data-act="b-clear" data-which="${which}">${BK.clearArmed === which ? 'Really delete them? Click again' : label}</button>`;
 
 async function bankAct(act, t) {
-  if (/^b-(set|xbuild|topics)/.test(act)) return setAct(act, t);
+  if (/^b-(set|xbuild|topics|promptbuild)/.test(act)) return setAct(act, t);
   const id = t.dataset && t.dataset.id, chId = (ROUTE && ROUTE.realId) || t.dataset.ch;
   if (act !== 'b-del') BK.delId = null;
   if (act !== 'b-clear') BK.clearArmed = null;
@@ -286,10 +290,11 @@ async function bankAct(act, t) {
   if (act === 'b-exsubmit') return exSubmit();
   if (act === 'b-exleave') { exitExam(); return renderHome(); }
   if (act === 'b-exopen') { const x = EX.items[+t.dataset.i], work = EX.answers[+t.dataset.i], ch = EX.chId; exitExam(); openProblem(x.id, 'bank', ch); W.work = optionsOf(x) && work !== '' ? optionsOf(x)[+work] : work; return renderWork(); }
+  if (act === 'b-exswap') return exSwap(+t.dataset.i);
 }
 
 // ---- practice exam: a timed set from the chapter's originals and AI-made problems ----
-function exitExam() { if (EX) { clearInterval(EX.timer); EX = null; } }
+function exitExam() { if (EX) { clearInterval(EX.timer); if (EX.swapCtl) EX.swapCtl.abort(); EX = null; } }
 // A chapter's own problems, one uploaded exam's questions in their order, or a mix drawn from the chapters ticked on the
 // Practice exams page.
 const XS = { ch: new Set(), init: false, orig: false };
@@ -305,10 +310,30 @@ function exStart(chId, docId) {
   if (n < 1) return;
   exRun(label, ordered ? list : shuffle(list).slice(0, n), min, chId);
 }
-function exRun(label, items, min, chId) {
+// setId: when these items come from a saved set, its id — lets a question be swapped for a fresh one mid-exam,
+// saved back to the set itself (b-exswap), not just this sitting.
+function exRun(label, items, min, chId, setId) {
   round = null; Q = null; W.id = null; closeRef();
-  EX = { chId: chId || null, label, items, answers: items.map(() => ''), pa: items.map((p) => (partsOf(p) ? partsOf(p).map(() => '') : null)), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000) };
+  EX = { chId: chId || null, setId: setId || null, label, items, answers: items.map(() => ''), pa: items.map((p) => (partsOf(p) ? partsOf(p).map(() => '') : null)), endsAt: Date.now() + min * 60000, done: false, timer: setInterval(exTick, 1000), swapping: null, swapErr: '', swapCtl: null };
   renderExam();
+}
+// Regenerates one question in an exam taken from a saved set, and saves the swap back to the set itself. Deliberately
+// avoids bankBegin/bankEnd (they can re-render the whole route and end the exam) — it manages its own busy state on EX.
+async function exSwap(i) {
+  if (!EX || EX.done || EX.swapping != null || !EX.setId || !smp) return;
+  const cur = EX.items[i];
+  EX.swapping = i; EX.swapErr = ''; EX.swapCtl = new AbortController(); renderExam();
+  try {
+    const fresh = await regenProblem(cur, EX.swapCtl, (s) => { if (EX) { EX.swapErr = `Waiting for the AI quota (${s}s)…`; renderExam(); } });
+    await saveSwap(EX.setId, i, fresh.id);
+    await loadProblems();
+    if (!EX) return; // left the exam while this was running
+    EX.items[i] = fresh; EX.answers[i] = ''; EX.pa[i] = partsOf(fresh) ? partsOf(fresh).map(() => '') : null; EX.swapErr = '';
+  } catch (e) {
+    if (!EX) return;
+    if (e && e.code !== 'cancelled') EX.swapErr = mineErr(e);
+  }
+  if (EX) { EX.swapping = null; EX.swapCtl = null; renderExam(); }
 }
 const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 function exTick() {
@@ -344,14 +369,17 @@ function renderExam() {
       <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
       ${EX.items.map((p, i) => {
         const opts = optionsOf(p), parts = partsOf(p), longParts = parts && parts.some((c) => c.length > 40); // every box in a question is the same size
-        return `<div class="exq"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div><div class="qtext">${fmtMath(p.text)}</div>
+        const canSwap = EX.setId && smp, swapping = EX.swapping === i;
+        return `<div class="exq"><div class="exqhead"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div>${canSwap ? `<button class="link" data-act="b-exswap" data-i="${i}" ${EX.swapping != null ? 'disabled' : ''}>${swapping ? 'Swapping…' : '⟲ Swap this question'}</button>` : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
         ${parts ? `<div class="parts">${parts.map((c, k) => `<label class="part"><span class="ol">${'abcdefgh'[k]})</span><span class="ptext">${fmtMath(c)}</span>${longParts
           ? `<textarea data-exp="${i}" data-k="${k}" rows="2" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}">${esc(EX.pa[i][k])}</textarea>`
           : `<input class="line" type="text" data-exp="${i}" data-k="${k}" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}" value="${esc(EX.pa[i][k])}">`}</label>`).join('')}</div>`
           : opts ? `<div class="opts" role="radiogroup" aria-label="Choices for question ${i + 1}">${opts.map((c, k) => `<label class="opt"><input type="radio" name="exq${i}" data-exc="${i}" value="${k}" ${EX.answers[i] === String(k) ? 'checked' : ''}><span class="ol">${'abcdefgh'[k]})</span><span>${fmtMath(c)}</span></label>`).join('')}</div>`
           : `<textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea>`}</div>`;
       }).join('')}
-      <div class="answer"><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>`;
+      ${EX.swapErr ? `<div class="fb no" role="status"><p>${esc(EX.swapErr)}</p></div>` : ''}
+      <div class="answer"><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>
+    ${refPanelHTML()}`;
     return;
   }
   const keyed = EX.results.filter((r) => r !== null), right = keyed.filter(Boolean).length, blank = EX.answers.filter((a) => !a.trim()).length;
