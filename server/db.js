@@ -177,6 +177,13 @@ function openDb(dataDir) {
     }
     db.exec('PRAGMA user_version = 14; COMMIT');
   }
+  if (v < 15) {
+    // opts: the build settings behind an exam set (model exam, chapters, focus topic), kept so it can be rebuilt with fresh questions.
+    db.exec(`
+      ALTER TABLE studysets ADD COLUMN opts TEXT NOT NULL DEFAULT '{}';
+      PRAGMA user_version = 15;
+    `);
+  }
   return db;
 }
 

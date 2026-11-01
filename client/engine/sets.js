@@ -237,6 +237,99 @@ async function buildSet(o) {
   } catch (e) { await loadProblems().catch(() => {}); bankEnd('', e); }
 }
 
+// ---- mirroring: an exam built as a 1:1 parallel of an uploaded one, question for question ----
+// Each of the model exam's own questions becomes one slot, filled with a matching textbook problem when one exists, else
+// a fresh AI-written question modelled on it. o: { chapterIds, title, tplId, focus, from, where }. setId: when refreshing
+// a saved exam, its id — the set is updated in place instead of a new one being created, and its current problems are
+// avoided as textbook matches so a refresh doesn’t just hand back the same ones again.
+async function mirrorSet(o, setId) {
+  o = { chapterIds: [], ...o };
+  if (BK.busy) return;
+  if (!smp) { BK.err = 'Building a set needs the AI, which isn’t set up on this server.'; return bankHome(o.where); }
+  bankBegin(o.where);
+  const tally = { added: 0, cut: false };
+  try {
+    if (!PLOADED) await loadProblems().catch(() => { PROBS = { none: [] }; });
+    const canRead = (d) => d.chars && (d.kind !== 'image' || (smpLimits && smpLimits.images));
+    const want = new Set([o.tplId, o.from].filter(Boolean));
+    const unread = DOCS.filter((d) => canRead(d) && !READ_TRIED.has(d.id) && !allProblems().some((p) => p.sourceDoc === d.id)
+      && (want.has(d.id) || o.chapterIds.includes(d.chapterId)));
+    if (unread.length) { unread.forEach((d) => READ_TRIED.add(d.id)); await readDocs(unread, tally); await loadProblems(); }
+    await linkExam(!!unread.length);
+
+    const slots = docQuestions(o.tplId);
+    if (!slots.length) throw Object.assign(new Error('That exam has no questions read from it yet.'), { code: 'none' });
+    if (o.focus && o.from) {
+      BK.note = `Finding a question about ${o.focus}…`; paintBank();
+      const src = allProblems().filter((p) => p.kind === 'original' && p.sourceDoc === o.from);
+      if (src.length) {
+        const ctx = await classContext(o.focus, null);
+        const r = await aiJson(`${rules()}\n\nBelow are numbered questions from an instructor’s exam for "${CLASS.name}". Which ONE best tests or uses: ${o.focus}? Judge by what it asks (it may not use those words).${ctx}\n\nReply with only this JSON:\n{"match":3}\n\nQuestions:\n`
+          + src.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'), BK.ctl, bankWait(), 400);
+        const extra = src[(+(r && r.match) || 0) - 1];
+        if (extra) slots.push({ ...extra, topic: o.focus });
+      }
+    }
+
+    const prior = setId ? ((SETS.find((s) => s.id === setId) || {}).items || []) : [];
+    const avoid = new Set(prior.map((x) => x.id));
+    const items = slots.map((p) => {
+      const bookId = (p.links || []).find((id) => !avoid.has(id) && allProblems().some((b) => b.id === id));
+      if (bookId) avoid.add(bookId);
+      return { slot: p, bookId };
+    });
+
+    const made = [];
+    for (let tries = 0; tries < 3; tries++) {
+      const need = items.filter((x) => !x.bookId && !x.item);
+      if (!need.length) break;
+      for (let i = 0; i < need.length; i += 8) {
+        const batch = need.slice(i, i + 8);
+        BK.note = `Writing new questions like the model exam’s… (${Math.min(i + 8, need.length)} of ${need.length})`; paintBank();
+        const lines = batch.map((x, j) => `${j + 1}. [${x.slot.format || 'work'}] ${x.slot.text.replace(/\s+/g, ' ').slice(0, 240)}${x.slot.format === 'mc' ? ` (options: ${(x.slot.choices || []).join(' | ').slice(0, 240)})` : ''}${x.slot.format === 'parts' ? ` (parts: ${(x.slot.choices || []).join(' | ').slice(0, 240)})` : ''}${x.slot.answer ? ` (answer: ${x.slot.answer.slice(0, 60)})` : ''}`).join('\n');
+        const v = await aiJson(`${rules()}\n\nBelow are numbered questions from an instructor’s exam for "${CLASS.name}". Write one NEW practice question for EACH one, modelled closely on it (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Do not copy any original. `
+          + 'Keep each one’s answer format (the tag in brackets): a multiple-choice question gets four options, one correct and three believable wrong ones, listed in "choices" with the correct option’s text in "answer"; a multi-part question gets the same number of parts, each part’s prompt listed in "parts" with "format":"parts" and "answer" written "a) ... b) ..."; a written question gets no options. '
+          + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new question","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nQuestions:\n${lines}`, BK.ctl, bankWait(), 3000);
+        const seen = new Set([...allProblems(), ...made].map((p) => normText(p.text))), fresh = [];
+        (Array.isArray(v && v.problems) ? v.problems : []).forEach((q) => {
+          const x = batch[(+(q && q.like) || 0) - 1];
+          if (!x || x.item) return;
+          const sh = mixChoices(shapeProblem({ ...q, format: (q && q.format) || x.slot.format }));
+          if (!sh.text || (sh.format === 'mc' && keyIndex(sh, sh.choices) < 0)) return;
+          if (x.slot.format === 'parts' && (sh.format !== 'parts' || sh.choices.length !== (x.slot.choices || []).length)) return;
+          const key = normText(sh.text);
+          if (seen.has(key)) return;
+          seen.add(key);
+          x.pending = { kind: 'similar', text: sh.text, answer: sh.answer, format: sh.format, choices: sh.choices, steps: (Array.isArray(q.steps) ? q.steps : []).map((s) => String(s)), topic: x.slot.topic, sourceDoc: x.slot.sourceDoc, chapterId: x.slot.chapterId };
+          fresh.push(x);
+        });
+        if (!fresh.length) continue;
+        const posted = await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: fresh.map((x) => x.pending) });
+        fresh.forEach((x, i) => { x.item = { id: posted[i].id, src: 'ai', key: '' }; delete x.pending; });
+        made.push(...posted);
+      }
+    }
+
+    // an answer for every textbook match the text gave no key for (marked as the AI's)
+    const keyless = items.filter((x) => x.bookId).map((x) => allProblems().find((p) => p.id === x.bookId)).filter((p) => p && !p.answer).slice(0, 20);
+    const keys = {};
+    if (keyless.length) {
+      BK.note = 'Working out answers for problems that came without a key…'; paintBank();
+      try {
+        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. For a problem with parts, answer every part, written "a) ... b) ...". Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((p, i) => `${i + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 400)}${p.format === 'mc' ? ` Options: ${p.choices.join(' | ')}` : ''}${p.format === 'parts' ? ` Parts: ${p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join(' ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
+        (Array.isArray(kr && kr.answers) ? kr.answers : []).forEach((a) => { const p = keyless[(+(a && a.n) || 0) - 1]; if (p && a.answer) keys[p.id] = String(a.answer).slice(0, 500); });
+      } catch (e) { if (e && e.code === 'cancelled') throw e; /* no keys: the review says so */ }
+    }
+    items.forEach((x) => { if (x.bookId) x.item = { id: x.bookId, src: 'book', key: keys[x.bookId] || '' }; else if (!x.item) x.item = { id: x.slot.id, src: 'exam', key: '' }; }); // the AI never produced one: fall back to the original question itself
+
+    const payload = { title: o.title, kind: 'exam', chapterIds: o.chapterIds, items: items.map((x) => x.item), opts: { tplId: o.tplId, chapterIds: o.chapterIds, focus: o.focus, from: o.from } };
+    const set = setId ? await api('PATCH', `/api/sets/${setId}`, payload) : await api('POST', `/api/classes/${CLASS.id}/sets`, payload);
+    SETS = setId ? SETS.map((s) => (s.id === setId ? set : s)) : [set, ...SETS];
+    await loadProblems(); await loadChapters();
+    bankEnd(`${setId ? 'Refreshed' : 'Built'} “${set.title}” with ${plural(set.items.length, 'problem')}: ${breakdown(set.items)}.`);
+  } catch (e) { await loadProblems().catch(() => {}); bankEnd('', e); }
+}
+
 // ---- using a set ----
 function takeSet(id) {
   const s = SETS.find((x) => x.id === id);
@@ -267,8 +360,9 @@ const sizeOptions = (cur) => SET_SIZES.map((n) => `<option value="${n}" ${n === 
 const setMissing = (s) => s.items.length - setProblems(s).length;
 function setRowHTML(s) {
   const items = setProblems(s), gone = setMissing(s), when = new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const canRefresh = s.kind === 'exam' && s.opts && s.opts.tplId && smp;
   return `<div class="docrow"><div class="dtop"><b>${esc(s.title)}</b><small>${plural(items.length, 'problem')} &middot; ${breakdown(items) || 'empty'} &middot; ${when}</small>${gone ? `<small class="warn">${plural(gone, 'question')} gone</small>` : ''}</div>
-    <div class="dact"><button class="btn alt sm" data-act="b-settake" data-id="${s.id}">Take it</button><button class="btn alt sm" data-act="b-setprint" data-id="${s.id}">Print</button>
+    <div class="dact"><button class="btn alt sm" data-act="b-settake" data-id="${s.id}">Take it</button>${canRefresh ? `<button class="btn alt sm" data-act="b-setrefresh" data-id="${s.id}" ${BK.busy ? 'disabled' : ''}>Refresh questions</button>` : ''}<button class="btn alt sm" data-act="b-setprint" data-id="${s.id}">Print</button>
       <button class="link" data-act="b-setdel" data-id="${s.id}">${SS.delId === s.id ? 'Really delete? Click again' : 'Delete'}</button></div></div>`;
 }
 // The exam builder on the Exams page: chapters, the instructor's exam to model it on, the mix, the size.
@@ -278,12 +372,14 @@ function examBuilderHTML(list) {
   if (SS.from && !tpls.some((d) => d.id === SS.from)) SS.from = '';
   const count = (id) => (PROBS[id] || []).length, topics = topicList();
   const chk = (id, label) => `<label class="chk"><input type="checkbox" data-act="b-xch" data-id="${id}" ${XS.ch.has(id) ? 'checked' : ''}> ${label} <small>${plural(count(id), 'problem')}</small></label>`;
+  const tplDoc = tpls.find((d) => d.id === SS.tpl), modelN = SS.tpl ? docQuestions(SS.tpl).length : 0;
   return `<section class="zone"><h3>Build my exam</h3>
     <small>Pick the chapters the exam covers. ${tpls.length ? 'It mixes your instructor’s questions, problems from the text and new ones written to match' : 'You haven’t uploaded an instructor exam yet, so it will use problems from the text and new ones written to match (upload one below to include its questions)'}, and is saved so you can retake or print it.</small>
     ${CHAPTERS.length ? `<div class="xch">${CHAPTERS.map((c) => chk(c.id, esc(c.title))).join('')}${loose.length ? chk('none', 'Not filed under a chapter') : ''}</div>` : '<small>Add chapters first (use “+ Add chapter” in the sidebar) so the exam can cover them.</small>'}
     <div class="xrow"><label class="fld"><small>Model it on</small><select class="line" data-ss="tpl">${[['', 'No model exam']].concat(tpls.map((d) => [d.id, 'Model: ' + d.name])).map(([v, l]) => `<option value="${v}" ${SS.tpl === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-      <label class="fld"><small>Mix</small><select class="line" data-ss="mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
-      <label class="fld"><small>Size</small><select class="line" data-ss="xsize">${sizeOptions(SS.xsize)}</select></label></div>
+      ${SS.tpl ? '' : `<label class="fld"><small>Mix</small><select class="line" data-ss="mix">${Object.entries(SMIX).map(([k, x]) => `<option value="${k}" ${SS.mix === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
+      <label class="fld"><small>Size</small><select class="line" data-ss="xsize">${sizeOptions(SS.xsize)}</select></label>`}</div>
+    ${SS.tpl ? `<small>Rebuilds <b>${esc(tplDoc ? tplDoc.name : 'that exam')}</b> with ${plural(modelN, 'question')}: a matching problem from your textbook, or a fresh one written by the AI, for each of its questions, in the same order.</small>` : ''}
     <div class="xrow"><label class="fld"><small>Also include questions about (optional)</small><input class="line" type="text" id="xfocus" data-ss="focus" list="xtopics" maxlength="100" placeholder="Search your chapters’ topics, or type one" autocomplete="off" value="${esc(SS.focus)}"><datalist id="xtopics">${topics.map((t) => `<option value="${esc(t.title)}" label="${chapterById(t.chapterId) ? esc(chapterById(t.chapterId).title) : ''}"></option>`).join('')}</datalist></label>
       <label class="fld"><small>…taken from</small><select class="line" data-ss="from">${[['', 'Any instructor exam']].concat(tpls.map((d) => [d.id, d.name])).map(([v, l]) => `<option value="${v}" ${SS.from === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
     <small class="topichint">${topics.length ? `${plural(topics.length, 'topic')} from your chapters. Pick one to pull that topic’s questions into the exam, from the exam chosen above.` : 'No topic list yet. The AI can read your chapters and list what each one teaches, so you can pick from it.'}
@@ -304,6 +400,7 @@ async function setAct(act, t) {
   if (act === 'b-topics') return scanTopics();
   if (act === 'b-settake') return takeSet(id);
   if (act === 'b-setprint') return printSet(id);
+  if (act === 'b-setrefresh') { const s = SETS.find((x) => x.id === id); return s && mirrorSet({ ...s.opts, title: s.title, where: null }, s.id); }
   if (act === 'b-setdel') {
     if (SS.delId !== id) { SS.delId = id; return renderRoute(true); }
     try { await api('DELETE', `/api/sets/${id}`); SETS = SETS.filter((s) => s.id !== id); } catch (e) { BK.err = e.message; }
@@ -315,7 +412,10 @@ async function setAct(act, t) {
     SS.focus = focus;
     if (!ids.length && !SS.tpl && !focus) { BK.err = 'Tick at least one chapter.'; return renderRoute(true); }
     const tpl = DOCS.find((d) => d.id === SS.tpl), base = tpl ? `Exam like ${tpl.name.replace(/\.[^.]+$/, '')}` : `Practice exam, ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-    return buildSet({ kind: 'exam', chapterIds: ids, tplId: SS.tpl, focus, from: SS.from, title: focus ? `${base}, plus ${focus}` : base, size: SS.xsize, mix: SS.mix, where: null });
+    const title = focus ? `${base}, plus ${focus}` : base;
+    return SS.tpl
+      ? mirrorSet({ chapterIds: ids, tplId: SS.tpl, focus, from: SS.from, title, where: null })
+      : buildSet({ kind: 'exam', chapterIds: ids, tplId: SS.tpl, focus, from: SS.from, title, size: SS.xsize, mix: SS.mix, where: null });
   }
 }
 app.addEventListener('change', (e) => {

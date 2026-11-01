@@ -485,21 +485,37 @@ ${p.answer}`.toLowerCase())).slice(0, 40).map(problemOut);
 
   // ---- study sets: a saved list of bank problems (a chapter's study set, or an exam built across chapters) ----
   const SRC = ['exam', 'book', 'ai'];
-  const setOut = (r) => ({ id: r.id, classId: r.class_id, kind: r.kind, title: r.title, chapterIds: JSON.parse(r.chapter_ids), items: JSON.parse(r.items), createdAt: r.created_at });
+  const setOut = (r) => ({ id: r.id, classId: r.class_id, kind: r.kind, title: r.title, chapterIds: JSON.parse(r.chapter_ids), items: JSON.parse(r.items), opts: JSON.parse(r.opts || '{}'), createdAt: r.created_at });
+  // Build options kept so an exam set can be rebuilt with fresh questions later (the model exam, its chapters, a focus topic).
+  const optsOut = (classId, o) => (o && typeof o === 'object' ? {
+    tplId: clip(o.tplId, 40), chapterIds: (Array.isArray(o.chapterIds) ? o.chapterIds : []).map((c) => chapterOf(classId, c)).filter(Boolean),
+    focus: clip(o.focus, 100), from: clip(o.from, 40),
+  } : {});
+  const setsOf = (classId, body) => {
+    const items = Array.isArray(body && body.items) ? body.items : [], mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(classId).map((r) => r.id));
+    return items.filter((x) => x && mine.has(x.id)).slice(0, 200).map((x) => ({ id: x.id, src: SRC.includes(x.src) ? x.src : 'book', key: clip(x.key, 500) }));
+  };
   api.get('/classes/:id/sets', (req, res) => {
     if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
     res.json(db.prepare('SELECT * FROM studysets WHERE class_id = ? ORDER BY created_at DESC, rowid DESC').all(req.params.id).map(setOut));
   });
   api.post('/classes/:id/sets', express.json({ limit: '1mb' }), (req, res) => {
     if (!db.prepare('SELECT 1 FROM classes WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'No such class.' });
-    const b = req.body || {}, mine = new Set(db.prepare('SELECT id FROM problems WHERE class_id = ?').all(req.params.id).map((r) => r.id));
-    const items = (Array.isArray(b.items) ? b.items : []).filter((x) => x && mine.has(x.id)).slice(0, 200)
-      .map((x) => ({ id: x.id, src: SRC.includes(x.src) ? x.src : 'book', key: clip(x.key, 500) }));
+    const b = req.body || {}, items = setsOf(req.params.id, b);
     if (!items.length) return res.status(400).json({ error: 'A set needs at least one problem.' });
     const id = newId(), chapters = (Array.isArray(b.chapterIds) ? b.chapterIds : []).map((c) => chapterOf(req.params.id, c)).filter(Boolean);
-    db.prepare('INSERT INTO studysets (id, class_id, kind, title, chapter_ids, items, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, req.params.id, b.kind === 'exam' ? 'exam' : 'chapter', clip(b.title, 120) || 'Study set', JSON.stringify(chapters), JSON.stringify(items), Date.now());
+    db.prepare('INSERT INTO studysets (id, class_id, kind, title, chapter_ids, items, opts, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, req.params.id, b.kind === 'exam' ? 'exam' : 'chapter', clip(b.title, 120) || 'Study set', JSON.stringify(chapters), JSON.stringify(items), JSON.stringify(optsOut(req.params.id, b.opts)), Date.now());
     res.status(201).json(setOut(db.prepare('SELECT * FROM studysets WHERE id = ?').get(id)));
+  });
+  api.patch('/sets/:id', express.json({ limit: '1mb' }), (req, res) => {
+    const s = db.prepare('SELECT * FROM studysets WHERE id = ?').get(req.params.id);
+    if (!s) return res.status(404).json({ error: 'No such set.' });
+    const b = req.body || {}, items = setsOf(s.class_id, b);
+    if (!items.length) return res.status(400).json({ error: 'A set needs at least one problem.' });
+    const opts = b.opts !== undefined ? JSON.stringify(optsOut(s.class_id, b.opts)) : s.opts;
+    db.prepare('UPDATE studysets SET items = ?, opts = ? WHERE id = ?').run(JSON.stringify(items), opts, s.id);
+    res.json(setOut(db.prepare('SELECT * FROM studysets WHERE id = ?').get(s.id)));
   });
   api.delete('/sets/:id', (req, res) => {
     const r = db.prepare('DELETE FROM studysets WHERE id = ?').run(req.params.id);

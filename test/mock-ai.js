@@ -35,6 +35,7 @@ function answer(p) {
   if (p.includes('Find every problem')) return findProblems(p);
   if (p.includes('name the textbook problems')) return { links: [] };
   if (p.includes('specific topics, rules')) return { topics: ['naming polyatomic ions', 'balancing equations', 'significant figures'] };
+  if (p.includes('Which ONE best tests or uses')) return { match: 1 };
   if (p.includes('List the ones that test or use')) return { match: [1, 2] };
   if (p.includes('Pick up to 5')) return { picks: numbered(after(p, 'Problems:')).slice(0, 5).map((x) => ({ n: x.n, wrong: ['12', '7.5', '0.25'], answer: '4' })) };
   if (p.includes('captures the main ideas')) {
@@ -55,6 +56,15 @@ function answer(p) {
       else if (parts) list.push({ like: m.n, text: `Mock new multi-part question ${i + 1} like ${m.n}.`, format: 'parts', parts: parts.split('|').map((x, j) => `new part ${j + 1}`), answer: '', steps: [] });
       else list.push({ like: m.n, text: `Mock new written question ${i + 1} like ${m.n}.`, format: 'work', choices: [], answer: '7', steps: ['step'] });
     }
+    return { problems: list };
+  }
+  if (p.includes('Write one NEW practice question for EACH one')) {
+    const models = numbered(after(p, 'Questions:\n'));
+    const list = models.map((m) => {
+      if (/\[mc\]/.test(m.text) || /options:/.test(m.text)) return { like: m.n, text: `Mock mirrored question ${m.n}: which is right?`, format: 'mc', choices: ['alpha', 'beta', 'gamma', 'delta'], answer: 'beta', steps: ['think'] };
+      if (/\[parts\]/.test(m.text)) { const parts = (m.text.match(/\(parts: ([^)]*)\)/) || [])[1] || 'a|b'; return { like: m.n, text: `Mock mirrored multi-part question ${m.n}.`, format: 'parts', parts: parts.split('|').map((x, j) => `new part ${j + 1}`), answer: '', steps: [] }; }
+      return { like: m.n, text: `Mock mirrored written question ${m.n}.`, format: 'work', choices: [], answer: '7', steps: ['step'] };
+    });
     return { problems: list };
   }
   if (p.includes('multiple-choice practice problems for the section')) {

@@ -390,7 +390,7 @@ test('migration: a v3 database keeps its documents and guides, now unsorted', as
   assert.strictEqual(guide.cards[0].a, 'a');
   assert.deepStrictEqual(await get('/api/classes/c1/chapters'), []);
   assert.deepStrictEqual((await get('/api/classes')).find((c) => c.id === 'c1').dates, [{ label: 'Exam 2', date: '2026-11-02' }], 'the old exam date becomes a key date');
-  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 14);
+  assert.strictEqual(made.db.prepare('PRAGMA user_version').get().user_version, 15);
   s.close(); made.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -461,11 +461,11 @@ test('migration 14 reads stored questions again: jammed options become multiple 
   ins.run('p2', 'original', 'Question 3: For the following equation: Mg(OH)2 + 2 HCl  a) Write the full ionic equation  b) Write the net ionic equation', '');
   ins.run('p3', 'original', 'Calculate the molar mass of water.', 'work');
   ins.run('p4', 'similar', 'Question 1: a)x c) y b)z d) w', 'work');
-  d.exec('ALTER TABLE problems DROP COLUMN raw; PRAGMA user_version = 13;');
+  d.exec('ALTER TABLE problems DROP COLUMN raw; ALTER TABLE studysets DROP COLUMN opts; PRAGMA user_version = 13;');
   d.close();
   d = openDb(dir);
   const row = (id) => d.prepare('SELECT * FROM problems WHERE id = ?').get(id);
-  assert.strictEqual(d.prepare('PRAGMA user_version').get().user_version, 14);
+  assert.strictEqual(d.prepare('PRAGMA user_version').get().user_version, 15);
   assert.strictEqual(row('p1').format, 'mc');
   assert.deepStrictEqual(JSON.parse(row('p1').choices), ['3.57 x 10^23', '0.592', '1.78 x 10^23', '9.22 x 10^24']);
   assert.strictEqual(row('p1').text, '42.0 g Cl2 contains ________ molecules of Cl2 .');
