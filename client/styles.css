@@ -106,6 +106,7 @@ h2.part { font-size: 1.35rem; margin-top: 40px; padding-bottom: 6px; border-bott
 .choice:hover:not(:disabled) { border-color: var(--accent); }
 .choice:disabled { opacity: .45; }
 .choice.right { background: var(--good-bg); border-color: var(--good); opacity: 1; }
+.choice.wrong { background: var(--notyet-bg); border-color: var(--notyet); opacity: 1; }
 .choice svg { display: block; margin: 0 auto; max-width: 100%; height: auto; color: var(--ink); }
 .fb { border-radius: 4px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; border-left: 3px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, var(--card)); }
 .fb.good { border-left-color: var(--good); background: var(--good-bg); }

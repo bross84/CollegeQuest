@@ -230,7 +230,7 @@ function renderQuiz() {
   const x = Q.items[Q.i], st = Q.state, locked = st === 'right' || st === 'shown', last = Q.i === Q.items.length - 1;
   let input;
   if (st === 'choices' || (locked && Q.choices)) {
-    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${fmtMath(c)}</button>`).join('')}</div>`;
+    input = `<div class="choices ${Q.choices.some((c) => c.length > 34) ? 'wide' : ''}">${Q.choices.map((c, i) => `<button class="choice ${locked && i === Q.ans ? 'right' : Q.wrong.includes(i) ? 'wrong' : ''}" data-act="g-pick" data-c="${i}" ${locked || Q.wrong.includes(i) ? 'disabled' : ''}>${fmtMath(c)}</button>`).join('')}</div>`;
   } else {
     input = `<form class="answer" data-form="gq" autocomplete="off"><input id="gans" type="text" enterkeyhint="done" autocapitalize="off" spellcheck="false" aria-label="Your answer" value="${esc(Q.typed)}" ${locked ? 'disabled' : ''} placeholder="your answer">
       ${locked ? '' : '<button class="btn" type="submit">Check</button>'}</form>`;

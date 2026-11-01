@@ -122,7 +122,7 @@ function renderRound() {
   const locked = state === 'right' || state === 'shown';
   let input;
   if (p.type === 'choice') {
-    input = `<div class="choices ${p.choices.some((c) => plain(c).length > 34) ? 'wide' : ''}">${p.choices.map((c, i) => `<button class="choice ${locked && i === p.answer ? 'right' : ''}" data-act="pick" data-c="${i}" ${locked || round.wrong.includes(i) ? 'disabled' : ''}>${c}</button>`).join('')}</div>`;
+    input = `<div class="choices ${p.choices.some((c) => plain(c).length > 34) ? 'wide' : ''}">${p.choices.map((c, i) => `<button class="choice ${locked && i === p.answer ? 'right' : round.wrong.includes(i) ? 'wrong' : ''}" data-act="pick" data-c="${i}" ${locked || round.wrong.includes(i) ? 'disabled' : ''}>${c}</button>`).join('')}</div>`;
   } else {
     input = `<form class="answer" id="af" autocomplete="off"><input id="ans" type="text" inputmode="text" enterkeyhint="done" autocapitalize="off" spellcheck="false"
       aria-label="Your answer" value="${esc(round.typed)}" ${locked ? 'disabled' : ''} placeholder="${esc(p.ph || (PACK.ph || {})[p.type] || 'your answer')}">
