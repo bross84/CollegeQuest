@@ -354,6 +354,12 @@ select.line.sm { padding: 6px 10px; font-size: .9rem; }
 .exqhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .prob.exq { margin-top: 14px; }
 .sum + .prob { margin-top: 14px; }
+.examhead { margin-bottom: 18px; }
+.examhead h1 { font-size: clamp(1.3rem, 3.2vw, 1.8rem); margin: 6px 0 10px; }
+.examhead .lead { margin: 0; }
+.examtake { display: flex; flex-direction: column; gap: 16px; padding-bottom: 68px; }
+.examfoot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--card); border-top: 1px solid var(--line); padding: 10px max(18px, env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-right, 0px)); }
+.examfoot-in { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* videos */
 .fb .acts .videos, .acts .videos { flex: 1 1 100%; }

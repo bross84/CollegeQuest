@@ -362,15 +362,18 @@ const relatedHTML = (p) => {
   const rel = (p.links || []).map((id) => allProblems().find((x) => x.id === id)).filter(Boolean);
   return rel.length ? `<details class="paste"><summary>Practice the same idea from the text</summary>${rel.map((r) => `<p class="qtext">${fmtMath(r.text)}${chapterById(r.chapterId) ? ` <small>${esc(chapterById(r.chapterId).title)}</small>` : ''}</p>`).join('')}</details>` : '';
 };
+// "N of M answered": EX.answers[i] is kept in sync for every format (mc, work, and the joined "a) ... b) ..." for parts), so a plain check works for all of them.
+function exProgress() { return `${EX.items.filter((_, i) => EX.answers[i].trim()).length} of ${EX.items.length} answered`; }
 function renderExam() {
   if (!EX.done) {
     app.innerHTML = `<div class="rbar"><button class="link" data-act="b-exleave">‹ Leave exam</button><span class="reflinks">${refChipsHTML()}</span><span class="progress" id="extime">${clock(EX.endsAt - Date.now())} left</span></div>
-    <div class="prob"><div class="eyebrow">Practice exam &middot; ${esc(EX.label)}</div>
-      <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p>
+    <div class="examhead"><div class="eyebrow">Practice exam</div><h1>${esc(EX.label)}</h1>
+      <p class="lead">No hints until you submit. Write your work and your final answer on the last line of each answer.</p></div>
+    <div class="examtake">
       ${EX.items.map((p, i) => {
         const opts = optionsOf(p), parts = partsOf(p), longParts = parts && parts.some((c) => c.length > 40); // every box in a question is the same size
         const canSwap = EX.setId && smp, swapping = EX.swapping === i;
-        return `<div class="exq"><div class="exqhead"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div>${canSwap ? `<button class="link" data-act="b-exswap" data-i="${i}" ${EX.swapping != null ? 'disabled' : ''}>${swapping ? 'Swapping…' : '⟲ Swap this question'}</button>` : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
+        return `<div class="prob exq"><div class="exqhead"><div class="eyebrow">Question ${i + 1} of ${EX.items.length}</div>${canSwap ? `<button class="link" data-act="b-exswap" data-i="${i}" ${EX.swapping != null ? 'disabled' : ''}>${swapping ? 'Swapping…' : '⟲ Swap this question'}</button>` : ''}</div><div class="qtext">${fmtMath(p.text)}</div>
         ${parts ? `<div class="parts">${parts.map((c, k) => `<label class="part"><span class="ol">${'abcdefgh'[k]})</span><span class="ptext">${fmtMath(c)}</span>${longParts
           ? `<textarea data-exp="${i}" data-k="${k}" rows="2" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}">${esc(EX.pa[i][k])}</textarea>`
           : `<input class="line" type="text" data-exp="${i}" data-k="${k}" aria-label="Your answer to question ${i + 1} part ${'abcdefgh'[k]}" value="${esc(EX.pa[i][k])}">`}</label>`).join('')}</div>`
@@ -378,8 +381,9 @@ function renderExam() {
           : `<textarea data-exa="${i}" rows="4" aria-label="Your answer to question ${i + 1}" placeholder="Your work and answer">${esc(EX.answers[i])}</textarea>`}</div>`;
       }).join('')}
       ${EX.swapErr ? `<div class="fb no" role="status"><p>${esc(EX.swapErr)}</p></div>` : ''}
-      <div class="answer"><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>
-    ${refPanelHTML()}`;
+      ${refPanelHTML()}
+    </div>
+    <div class="examfoot"><div class="examfoot-in"><span class="progress" id="exprog">${exProgress()}</span><button class="btn" data-act="b-exsubmit">Submit exam</button></div></div>`;
     return;
   }
   const keyed = EX.results.filter((r) => r !== null), right = keyed.filter(Boolean).length, blank = EX.answers.filter((a) => !a.trim()).length;
@@ -471,6 +475,7 @@ app.addEventListener('change', async (e) => {
     renderRoute(true);
   }
 });
+const exTouchProgress = () => { const el = document.getElementById('exprog'); if (el) el.textContent = exProgress(); };
 app.addEventListener('input', (e) => {
   const t = e.target;
   if (!EX || EX.done || !t.dataset) return;
@@ -480,5 +485,6 @@ app.addEventListener('input', (e) => {
     EX.pa[i][+t.dataset.k] = t.value;
     EX.answers[i] = EX.pa[i].map((v, k) => (v.trim() ? `${'abcdefgh'[k]}) ${v.trim()}` : '')).filter(Boolean).join('\n');
   }
+  if (t.dataset.exa !== undefined || t.dataset.exp !== undefined) exTouchProgress();
 });
-app.addEventListener('change', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exc !== undefined && t.checked) EX.answers[+t.dataset.exc] = t.value; });
+app.addEventListener('change', (e) => { const t = e.target; if (EX && !EX.done && t.dataset && t.dataset.exc !== undefined && t.checked) { EX.answers[+t.dataset.exc] = t.value; exTouchProgress(); } });
