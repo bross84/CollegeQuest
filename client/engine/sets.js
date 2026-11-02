@@ -70,8 +70,8 @@ async function linkExam(redo) {
       r = await aiJson(`${rules()}\n\nA student is studying for exams in "${CLASS.name}". Below are questions from the instructor’s practice exam, then numbered problems from the textbook. `
         + 'For each question, name the textbook problems (only from its "possible matches") that test the same skill or idea, best first, at most 2. Use an empty list when none really does.\n\n'
         + 'Reply with only this JSON:\n{"links":[{"q":1,"match":[3]}]}\n\nExam questions:\n'
-        + batch.map((q, j) => `Q${j + 1}: ${clip(q.text, 300)}\n  possible matches: ${short[j].map((b) => idx.get(b.id)).join(', ') || 'none'}`).join('\n')
-        + '\n\nTextbook problems:\n' + cands.map((b, j) => `${j + 1}. ${clip(b.text, 220)}`).join('\n'), BK.ctl, bankWait(), 1500);
+        + batch.map((q, j) => `Q${j + 1}: ${clip(q.text, 700)}\n  possible matches: ${short[j].map((b) => idx.get(b.id)).join(', ') || 'none'}`).join('\n')
+        + '\n\nTextbook problems:\n' + cands.map((b, j) => `${j + 1}. ${clip(b.text, 500)}`).join('\n'), BK.ctl, bankWait(), 1500);
     }
     const got = Array.isArray(r && r.links) ? r.links : [];
     for (let j = 0; j < batch.length; j++) {
@@ -163,7 +163,7 @@ async function buildSet(o, setId) {
         BK.note = `Finding the questions about ${o.focus}… (${Math.min(i + 60, src.length)} of ${src.length})`; paintBank();
         const part = src.slice(i, i + 60);
         const r = await aiJson(`${rules()}\n\nBelow are numbered questions from the instructor’s practice exams for "${CLASS.name}". List the ones that test or use: ${o.focus}. Judge by what each one asks (it may not use those words), and leave out ones that don’t really involve it.${ctx}\n\nReply with only this JSON:\n{"match":[3,7]}\n\nQuestions:\n`
-          + part.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'), BK.ctl, bankWait(), 800);
+          + part.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 500)}`).join('\n'), BK.ctl, bankWait(), 800);
         (Array.isArray(r && r.match) ? r.match : []).forEach((x) => { const p = part[(+x || 0) - 1]; if (p && !forced.includes(p)) forced.push(p); });
       }
       if (!forced.length) throw Object.assign(new Error(`I couldn’t find any questions about “${o.focus}” in ${o.from ? 'that exam' : 'your instructor’s exams'}.`), { code: 'none' });
@@ -190,7 +190,7 @@ async function buildSet(o, setId) {
     const tplQs = o.tplId ? allProblems().filter((p) => p.kind === 'original' && p.sourceDoc === o.tplId) : [], fmtCount = {};
     tplQs.forEach((p) => { const f = p.format || 'work'; fmtCount[f] = (fmtCount[f] || 0) + 1; });
     const fmtLine = Object.keys(fmtCount).length > 1 ? `The model exam is ${Object.entries(fmtCount).map(([f, c]) => `${c} ${FMT_NAME[f]}`).join(', ')}; choose in about the same proportions (the tag after E, B or A shows each problem’s format). ` : '';
-    const lines = cand.map((p, i) => `${i + 1}. [${letter[srcOf(p)]}${p.format ? ', ' + p.format : ''}${multi && chapterById(p.chapterId) ? ', ' + chapterById(p.chapterId).title : ''}] ${p.text.replace(/\s+/g, ' ').slice(0, 240)}`).join('\n');
+    const lines = cand.map((p, i) => `${i + 1}. [${letter[srcOf(p)]}${p.format ? ', ' + p.format : ''}${multi && chapterById(p.chapterId) ? ', ' + chapterById(p.chapterId).title : ''}] ${p.text.replace(/\s+/g, ' ').slice(0, 500)}`).join('\n');
     const r = !nPick ? null : await aiJson(`${rules()}\n\nBelow are numbered practice problems for "${CLASS.name}". E = from the instructor’s practice exam, B = from the textbook, A = written by an AI. `
       + `Choose ${nPick} of them for a study set that captures the main ideas: cover every distinct topic, skip near-duplicates, and mix easy and hard. Aim for about ${nE} E and ${nB} B (take more of the other kind if one runs short; use A only if you must). `
       + (multi ? 'The set spans several chapters; keep the same balance between chapters as the E problems have. ' : '') + fmtLine
@@ -207,10 +207,10 @@ async function buildSet(o, setId) {
       if (want <= 0) break;
       BK.note = 'Writing new problems like the ones you’ll be tested on…'; paintBank();
       const k = Math.min(want, 12), seen = new Set([...allProblems(), ...made].map((p) => normText(p.text)));
-      const models = picks.map((x, i) => `${i + 1}. [${letter[srcOf(x.p)]}, ${x.p.format || 'work'}] ${x.p.text.replace(/\s+/g, ' ').slice(0, 240)}${x.p.format === 'mc' ? ` (options: ${x.p.choices.join(' | ').slice(0, 240)})` : ''}${x.p.format === 'parts' ? ` (parts: ${x.p.choices.join(' | ').slice(0, 240)})` : ''}${x.p.answer ? ` (answer: ${x.p.answer.slice(0, 60)})` : ''}`).join('\n');
+      const models = picks.map((x, i) => `${i + 1}. [${letter[srcOf(x.p)]}, ${x.p.format || 'work'}] ${x.p.text.replace(/\s+/g, ' ').slice(0, 500)}${x.p.format === 'mc' ? ` (options: ${x.p.choices.join(' | ').slice(0, 400)})` : ''}${x.p.format === 'parts' ? ` (parts: ${x.p.choices.join(' | ').slice(0, 400)})` : ''}${x.p.answer ? ` (answer: ${x.p.answer.slice(0, 150)})` : ''}`).join('\n');
       const v = await aiJson(`${rules()}\n\nBelow are numbered problems a student will be tested on. Write ${k} NEW practice problems, each modelled on one of them (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Spread them across different models, preferring the E ones. Do not copy any original. `
         + 'Keep each model’s answer format (the word after its letter): a multiple-choice model gets a multiple-choice problem with four options, one correct and three believable wrong ones, listed in "choices" with the correct option’s text in "answer"; a multi-part model gets a multi-part problem with the same number of parts, each part’s prompt listed in "parts" with "format":"parts" and "answer" written "a) ... b) ..."; a written model gets a written problem with no options. '
-        + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new problem","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nProblems:\n${models}`, BK.ctl, bankWait(), 3500);
+        + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new problem","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nProblems:\n${models}`, BK.ctl, bankWait(), 4500);
       const fresh = (Array.isArray(v && v.problems) ? v.problems : []).slice(0, k).map((q) => {
         const base = (picks[(+(q && q.like) || 1) - 1] || picks[0]).p;
         const sh = mixChoices(shapeProblem(q));
@@ -225,7 +225,7 @@ async function buildSet(o, setId) {
     if (keyless.length) {
       BK.note = 'Working out answers for problems that came without a key…'; paintBank();
       try {
-        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. For a problem with parts, answer every part, written "a) ... b) ...". Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((x, i) => `${i + 1}. ${x.p.text.replace(/\s+/g, ' ').slice(0, 400)}${x.p.format === 'mc' ? ` Options: ${x.p.choices.join(' | ')}` : ''}${x.p.format === 'parts' ? ` Parts: ${x.p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join(' ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
+        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. For a problem with parts, answer every part, written "a) ... b) ...". Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((x, i) => `${i + 1}. ${x.p.text.replace(/\s+/g, ' ').slice(0, 700)}${x.p.format === 'mc' ? ` Options: ${x.p.choices.join(' | ')}` : ''}${x.p.format === 'parts' ? ` Parts: ${x.p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join(' ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
         (Array.isArray(kr && kr.answers) ? kr.answers : []).forEach((a) => { const x = keyless[(+(a && a.n) || 0) - 1]; if (x && a.answer) keys[x.p.id] = String(a.answer).slice(0, 500); });
       } catch (e) { if (e && e.code === 'cancelled') throw e; /* no keys: the review says so */ }
     }
@@ -274,7 +274,7 @@ async function mirrorSet(o, setId) {
       if (src.length) {
         const ctx = await classContext(o.focus, null);
         const r = await aiJson(`${rules()}\n\nBelow are numbered questions from an instructor’s exam for "${CLASS.name}". Which ONE best tests or uses: ${o.focus}? Judge by what it asks (it may not use those words).${ctx}\n\nReply with only this JSON:\n{"match":3}\n\nQuestions:\n`
-          + src.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'), BK.ctl, bankWait(), 400);
+          + src.map((p, j) => `${j + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 500)}`).join('\n'), BK.ctl, bankWait(), 400);
         const extra = src[(+(r && r.match) || 0) - 1];
         if (extra) slots.push({ ...extra, topic: o.focus });
       }
@@ -295,10 +295,10 @@ async function mirrorSet(o, setId) {
       for (let i = 0; i < need.length; i += 8) {
         const batch = need.slice(i, i + 8);
         BK.note = `Writing new questions like the model exam’s… (${Math.min(i + 8, need.length)} of ${need.length})`; paintBank();
-        const lines = batch.map((x, j) => `${j + 1}. [${x.slot.format || 'work'}] ${x.slot.text.replace(/\s+/g, ' ').slice(0, 240)}${x.slot.format === 'mc' ? ` (options: ${(x.slot.choices || []).join(' | ').slice(0, 240)})` : ''}${x.slot.format === 'parts' ? ` (parts: ${(x.slot.choices || []).join(' | ').slice(0, 240)})` : ''}${x.slot.answer ? ` (answer: ${x.slot.answer.slice(0, 60)})` : ''}`).join('\n');
+        const lines = batch.map((x, j) => `${j + 1}. [${x.slot.format || 'work'}] ${x.slot.text.replace(/\s+/g, ' ').slice(0, 600)}${x.slot.format === 'mc' ? ` (options: ${(x.slot.choices || []).join(' | ').slice(0, 400)})` : ''}${x.slot.format === 'parts' ? ` (parts: ${(x.slot.choices || []).join(' | ').slice(0, 400)})` : ''}${x.slot.answer ? ` (answer: ${x.slot.answer.slice(0, 150)})` : ''}`).join('\n');
         const v = await aiJson(`${rules()}\n\nBelow are numbered questions from an instructor’s exam for "${CLASS.name}". Write one NEW practice question for EACH one, modelled closely on it (give its number as "like"): the same type and difficulty, but different numbers, names or wording. Do not copy any original. `
           + 'Keep each one’s answer format (the tag in brackets): a multiple-choice question gets four options, one correct and three believable wrong ones, listed in "choices" with the correct option’s text in "answer"; a multi-part question gets the same number of parts, each part’s prompt listed in "parts" with "format":"parts" and "answer" written "a) ... b) ..."; a written question gets no options. '
-          + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new question","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nQuestions:\n${lines}`, BK.ctl, bankWait(), 3000);
+          + `Work each one out carefully before you write its answer, and double-check it. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"problems":[{"like":1,"text":"the new question","format":"mc","choices":["option"],"answer":"the final answer","steps":["one short step"]}]}\n\nQuestions:\n${lines}`, BK.ctl, bankWait(), 4000);
         const seen = new Set([...allProblems(), ...made].map((p) => normText(p.text))), fresh = [];
         (Array.isArray(v && v.problems) ? v.problems : []).forEach((q) => {
           const x = batch[(+(q && q.like) || 0) - 1];
@@ -325,7 +325,7 @@ async function mirrorSet(o, setId) {
     if (keyless.length) {
       BK.note = 'Working out answers for problems that came without a key…'; paintBank();
       try {
-        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. For a problem with parts, answer every part, written "a) ... b) ...". Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((p, i) => `${i + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 400)}${p.format === 'mc' ? ` Options: ${p.choices.join(' | ')}` : ''}${p.format === 'parts' ? ` Parts: ${p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join(' ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
+        const kr = await aiJson(`${rules()}\n\nWork out the final answer to each numbered problem below, carefully. For a problem with options, "answer" is the text of the correct option. For a problem with parts, answer every part, written "a) ... b) ...". Reply with only this JSON:\n{"answers":[{"n":1,"answer":"the final answer"}]}\n\n${keyless.map((p, i) => `${i + 1}. ${p.text.replace(/\s+/g, ' ').slice(0, 700)}${p.format === 'mc' ? ` Options: ${p.choices.join(' | ')}` : ''}${p.format === 'parts' ? ` Parts: ${p.choices.map((c, k) => `${'abcdefgh'[k]}) ${c}`).join(' ')}` : ''}`).join('\n')}`, BK.ctl, bankWait(), 2500);
         (Array.isArray(kr && kr.answers) ? kr.answers : []).forEach((a) => { const p = keyless[(+(a && a.n) || 0) - 1]; if (p && a.answer) keys[p.id] = String(a.answer).slice(0, 500); });
       } catch (e) { if (e && e.code === 'cancelled') throw e; /* no keys: the review says so */ }
     }
@@ -362,8 +362,8 @@ async function regenProblem(p, ctl, onWait = () => {}) {
   const seen = new Set(allProblems().map((x) => normText(x.text)));
   const v = await aiJson(`${rules()}\n\nBelow is a practice problem. Write ONE new problem modelled closely on it: the same type, topic and difficulty, but different numbers, names or wording. Do not copy the original. `
     + 'Keep its answer format: a multiple-choice problem gets four options in "choices" with the correct one’s text in "answer"; a multi-part problem gets the same number of parts in "parts" with "format":"parts" and "answer" written "a) ... b) ..."; a written problem gets no options. '
-    + `Work it out carefully and double-check the answer. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"text":"the new problem","format":"${p.format || 'work'}","choices":[],"answer":"the final answer","steps":["one short step"]}\n\nProblem: ${p.text.replace(/\s+/g, ' ').slice(0, 400)}`
-    + (p.format === 'mc' ? `\nIts options: ${(p.choices || []).join(' | ')}` : p.format === 'parts' ? `\nIts parts: ${(p.choices || []).join(' | ')}` : ''), ctl, onWait, 1200);
+    + `Work it out carefully and double-check the answer. Plain text only (${PACK.finder}).\n\nReply with only this JSON:\n{"text":"the new problem","format":"${p.format || 'work'}","choices":[],"answer":"the final answer","steps":["one short step"]}\n\nProblem: ${p.text.replace(/\s+/g, ' ').slice(0, 800)}`
+    + (p.format === 'mc' ? `\nIts options: ${(p.choices || []).join(' | ')}` : p.format === 'parts' ? `\nIts parts: ${(p.choices || []).join(' | ')}` : ''), ctl, onWait, 1800);
   const sh = mixChoices(shapeProblem({ ...v, format: (v && v.format) || p.format }));
   if (!sh.text || (sh.format === 'mc' && keyIndex(sh, sh.choices) < 0) || seen.has(normText(sh.text))) throw Object.assign(new Error('Couldn’t write a new version of that question. Try again.'), { code: 'none' });
   const posted = await api('POST', `/api/classes/${CLASS.id}/problems`, { problems: [{ kind: 'similar', text: sh.text, answer: sh.answer, format: sh.format, choices: sh.choices, steps: (Array.isArray(v && v.steps) ? v.steps : []).map(String), topic: p.topic, sourceDoc: p.sourceDoc, chapterId: p.chapterId }] });
